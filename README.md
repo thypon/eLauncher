@@ -16,7 +16,11 @@ This might have been done on purpose, but OLauncher Light uses long deprecated A
 
 ## Download
 
-Currently, you can download the latest release of NoLauncher from the releases tab. It will also soon be possible to download from the F-Droid store, as I am planning to apply for inclusion of this app right after release.
+NoLauncher is available in the default F-Droid repository.
+
+[<img src="https://fdroid.gitlab.io/artwork/badge/get-it-on.png" alt="Get it on F-Droid" height="80">](https://f-droid.org/packages/com.artikus.nolauncher)
+
+Alternatively, you can download the apk file directly from the releases tab and install it manually. Do note that I will never officially publish NoLauncher to the Play Store.
 
 ## Contributing
 
