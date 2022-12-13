@@ -4,7 +4,7 @@ NoLauncher is an extremely lightweight and minimal launcher for Android inspired
 
 ## Features
 
-- Homescreen and app drawer: swipe down on homescreen to enter the app drawer
+- Homescreen and app drawer: swipe up on homescreen to enter the app drawer
 - Long press an app field on the homescreen to assign an app, app can be renamed
 - Type to search in app drawer, if only one result is left, it is automatically launched (like OLauncher)
 - Gestures: swipe down for notification center, left for camera app, right for phone app, double tap to lock screen (requires root)
