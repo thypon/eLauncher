@@ -2,7 +2,7 @@
 
 eLauncher is an extremely lightweight and minimal launcher for Android, based on NoLauncher and inspired by [OLauncher Light](https://github.com/tanujnotes/Ultra/), and OLauncher in general. It is even more barebones than OLauncher Light, and aims to provide only the most basic features.
 
-eLauncher favours support easy readibility on eInk/ePaper devices, such as the Onyx Boox Note series, and the Bigme HiBreak.
+eLauncher favours easy readibility on eInk/ePaper devices, such as the Onyx Boox Note series, and the Bigme HiBreak.
 
 ## Features
 
@@ -12,7 +12,7 @@ eLauncher favours support easy readibility on eInk/ePaper devices, such as the O
 - Homescreen and app drawer: swipe up on homescreen to enter the app drawer
 - Long press an app field on the homescreen to assign an app, app can be renamed
 - Type to search in app drawer, if only one result is left, it is automatically launched (like OLauncher)
-- Gestures: swipe down for notification center, left for camera app, right for phone app, double tap to hopen app drawer with keyboard
+- Gestures: swipe down for notification center, left for camera app, right for phone app, double tap to open app drawer with keyboard
 - Hold on empty space to change the number of apps on homescreen
 
 ## apk size differences with OLauncher Light
@@ -21,7 +21,7 @@ This might have been done on purpose, but OLauncher Light uses long deprecated A
 
 ## Download
 
-Alternatively, you can download the apk file directly from the releases tab and install it manually.
+You can download the apk file directly from the releases tab and install it manually.
 
 ## Contributing
 
