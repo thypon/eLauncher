@@ -184,6 +184,16 @@ public class MainActivity extends Activity {
 
     }
 
+    private Intent getDefaultBrowserIntent() {
+        Intent browserIntent = new Intent("android.intent.action.VIEW", Uri.parse("http://"));  
+        ResolveInfo resolveInfo = getPackageManager().resolveActivity(browserIntent,PackageManager.MATCH_DEFAULT_ONLY);
+
+        // This is the default browser's packageName
+        String packageName = resolveInfo.activityInfo.packageName;
+
+        return getPackageManager().getLaunchIntentForPackage(packageName);
+    }
+
     private class SwipeListener implements View.OnTouchListener {
         private final GestureDetector gestureDetector;
 
@@ -193,7 +203,7 @@ public class MainActivity extends Activity {
                 @SuppressWarnings("JavaReflectionMemberAccess") @SuppressLint({"WrongConstant"}) @Override public boolean onFling(MotionEvent e1, MotionEvent e2, float velocityX, float velocityY) {
                     float xDiff = e2.getX() - e1.getX();
                     float yDiff = e2.getY() - e1.getY();
-                    if (Math.abs(xDiff) > Math.abs(yDiff) && Math.abs(xDiff) > 100 && Math.abs(velocityX) > 100) startActivity(new Intent((xDiff > 0) ? Intent.ACTION_DIAL : MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA));
+                    if (Math.abs(xDiff) > Math.abs(yDiff) && Math.abs(xDiff) > 100 && Math.abs(velocityX) > 100) startActivity((xDiff > 0) ? new Intent(Intent.ACTION_DIAL) : getDefaultBrowserIntent());
                     else if (Math.abs(yDiff) > 100 && Math.abs(velocityY) > 100) {
                         if (yDiff > 0)
                             try { Class.forName("android.app.StatusBarManager").getMethod("expandNotificationsPanel").invoke(getSystemService("statusbar")); }
