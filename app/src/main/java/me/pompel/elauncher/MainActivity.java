@@ -91,10 +91,10 @@ public class MainActivity extends Activity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
         Window window = getWindow();
-        window.addFlags(FLAG_LAYOUT_NO_LIMITS);
+        //window.addFlags(FLAG_LAYOUT_NO_LIMITS);
         //window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
-        window.setStatusBarColor(Color.TRANSPARENT);
-        window.setNavigationBarColor(Color.TRANSPARENT);
+        window.setStatusBarColor(Color.WHITE);
+        window.setNavigationBarColor(Color.WHITE);
 
         appList = new ArrayList<>();
         appNames = new ArrayList<>();
