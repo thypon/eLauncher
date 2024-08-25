@@ -21,6 +21,15 @@ public class recyclerAdapter extends RecyclerView.Adapter<recyclerAdapter.AppVie
         this.listener = listener;
     }
 
+    private static boolean fuzzyContains(String str, String query) {
+        int strIndex = 0;
+        for (char c : query.toCharArray()) {
+            strIndex = str.indexOf(c, strIndex);
+            if (strIndex == -1) return false;
+        }
+        return true;
+    }
+
     @Override
     public Filter getFilter() {
         return new Filter() {
@@ -31,7 +40,7 @@ public class recyclerAdapter extends RecyclerView.Adapter<recyclerAdapter.AppVie
                 List<App> filteredApps = new ArrayList<>();
 
                 if (str.isEmpty()) filteredApps = appList;
-                else for (App app : appList) if (app.appName.toLowerCase().contains(str)) filteredApps.add(app);
+                else for (App app : appList) if (fuzzyContains(app.appName.toLowerCase(), str)) filteredApps.add(app);
 
                 results.count = filteredApps.size();
                 results.values = filteredApps;
