@@ -1,4 +1,4 @@
-package com.artikus.nolauncher;
+package me.pompel.elauncher;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;

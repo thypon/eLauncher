@@ -1,4 +1,4 @@
-package com.artikus.nolauncher;
+package me.pompel.elauncher;
 
 import static android.view.WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS;
 
@@ -34,8 +34,6 @@ import android.view.inputmethod.InputMethodManager;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.TextView;
-
-import com.artikus.nolauncher.recyclerAdapter;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -85,11 +83,6 @@ public class MainActivity extends Activity {
         search.setText("");
         if (intent != null) startActivity(intent);
         if (change) changeLayout(true, false);
-    }
-
-    public void lock() {
-        try { Runtime.getRuntime().exec(new String[] { "su", "-c", "input keyevent 26" }).waitFor(); }
-        catch (Exception e) { e.printStackTrace(); }
     }
 
     @Override public void onBackPressed() { if (findViewById(R.id.AppDrawer).getVisibility() == View.VISIBLE) changeLayout(true, true); }
@@ -151,9 +144,9 @@ public class MainActivity extends Activity {
         CharSequence[] alertApps = appNames.toArray(new CharSequence[0]);
         for (int i = 0; i < prefs.getInt("apps", 8); i++) {
             TextView textView = new TextView(this);
-            textView.setTextColor(Color.WHITE);
+            textView.setTextColor(Color.BLACK);
             textView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 25);
-            textView.setTypeface(Typeface.create("sans-serif-light", Typeface.NORMAL));
+            textView.setTypeface(Typeface.create("sans-serif-bold", Typeface.NORMAL));
             textView.setPadding(0, 0, 0, 50);
             textView.setText(prefs.getString(Integer.toString(i), "App"));
             textView.setTag(i);
@@ -207,13 +200,17 @@ public class MainActivity extends Activity {
                             catch (Exception e) { e.printStackTrace(); }
                         else {
                             changeLayout(false, true);
-                            keyboardAction(false);
+                            keyboardAction(true);
                         }
                     }
                     return true;
                 }
 
-                @Override public boolean onDoubleTap(MotionEvent e) { lock(); return true; }
+                @Override public boolean onDoubleTap(MotionEvent e) {
+                    changeLayout(false, true);
+                    keyboardAction(false);
+                    return true;
+                }
 
                 @Override public void onLongPress(MotionEvent e) {
                     super.onLongPress(e);

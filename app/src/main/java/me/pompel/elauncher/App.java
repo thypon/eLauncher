@@ -1,4 +1,4 @@
-package com.artikus.nolauncher;
+package me.pompel.elauncher;
 
 public class App {
     public String appName;
