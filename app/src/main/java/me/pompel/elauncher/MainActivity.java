@@ -124,7 +124,7 @@ public class MainActivity extends Activity {
                     if (!recyclerView.canScrollVertically(1)) keyboardAction(true);
                     else if (!recyclerView.canScrollVertically(-1)) {
                         if (onTop) changeLayout(true, true);
-                        else keyboardAction(false);
+                        else keyboardAction(true);
                     }
                 }
             }
