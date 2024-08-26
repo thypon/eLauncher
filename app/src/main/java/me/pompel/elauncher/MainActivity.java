@@ -87,12 +87,25 @@ public class MainActivity extends Activity {
             Log.i("ANTANI", "here2");
             Log.i("ANTANI", cursor.toString());
             Log.i("ANTANI", getBrowserPackageName());
+            Log.d("ANTANI", ""+cursor.getCount() );
+
+            if (cursor.moveToFirst() && cursor.getCount() > 0) {
+                while (!cursor.isAfterLast()) {
+
+                    @SuppressLint("Range") String title = cursor.getString(0);
+                    @SuppressLint("Range") String url = cursor.getString(1);
+                    // Do something with title and url
+                    Log.i("ANTANI", title);
+                    Log.i("ANTANI", url);
+
+                    cursor.moveToNext();
+
+                    bookmarkList.add(new Bookmark(title, url));
+
+                }
+            }
 
             while (cursor.moveToNext()) {
-                Log.i("ANTANI", "p"+cursor.getString(0));
-                Log.i("ANTANI", "i"+cursor.getString(1));
-
-                bookmarkList.add(new Bookmark(cursor.getString(0), cursor.getString(1)));
             }
         }
         Collections.sort(bookmarkList, (bookmark1, bookmark2) -> bookmark1.label().toString().compareToIgnoreCase(bookmark2.label().toString()));
