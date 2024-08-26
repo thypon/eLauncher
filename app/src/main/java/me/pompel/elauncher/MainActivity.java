@@ -36,6 +36,7 @@ import android.widget.TextView;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.List;
 
 public class MainActivity extends Activity {
     private ArrayList<App> appList;
@@ -191,13 +192,45 @@ public class MainActivity extends Activity {
     }
 
     private Intent getDefaultBrowserIntent() {
-        Intent browserIntent = new Intent("android.intent.action.VIEW", Uri.parse("http://"));  
+        Intent browserIntent = new Intent("android.intent.action.VIEW", Uri.parse("http://"));
         ResolveInfo resolveInfo = getPackageManager().resolveActivity(browserIntent,PackageManager.MATCH_DEFAULT_ONLY);
 
         // This is the default browser's packageName
         String packageName = resolveInfo.activityInfo.packageName;
 
         return getPackageManager().getLaunchIntentForPackage(packageName);
+    }
+
+    public Intent getLastLauncherIntent() {
+        PackageManager packageManager = getPackageManager();
+        Intent intent = new Intent(Intent.ACTION_MAIN);
+        intent.addCategory(Intent.CATEGORY_LAUNCHER);
+        intent.addCategory(Intent.CATEGORY_HOME);
+        intent.addCategory(Intent.CATEGORY_DEFAULT);
+
+        List<ResolveInfo> resolveInfoList = packageManager.queryIntentActivities(intent, 0);
+        String currentPackageName = getPackageName();
+        ResolveInfo lastLauncher = null;
+
+        for (ResolveInfo resolveInfo : resolveInfoList) {
+            String packageName = resolveInfo.activityInfo.packageName;
+            if (!packageName.equals(currentPackageName)) {
+                lastLauncher = resolveInfo;
+            }
+        }
+
+        if (lastLauncher != null) {
+            String packageName = lastLauncher.activityInfo.packageName;
+
+            // get intent for activity
+            intent.setPackage(packageName);
+            intent.setClassName(packageName, lastLauncher.activityInfo.name);
+            intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
+
+            return intent;
+        } else {
+            return null;
+        }
     }
 
     private class SwipeListener implements View.OnTouchListener {
@@ -225,7 +258,7 @@ public class MainActivity extends Activity {
                 }
 
                 @Override public boolean onDoubleTap(MotionEvent e) {
-                    changeLayout(false, true);
+                    openAppWithIntent(getLastLauncherIntent(), true);
                     return true;
                 }
 
