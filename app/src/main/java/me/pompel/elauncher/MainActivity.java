@@ -81,8 +81,12 @@ public class MainActivity extends Activity {
     private void openAppWithIntent(Intent intent, boolean change) {
         keyboardAction(true);
         search.setText("");
-        if (intent != null) startActivity(intent);
+        safeStartActivity(intent);
         if (change) changeLayout(true, false);
+    }
+
+    private void safeStartActivity(Intent intent) {
+        if (intent != null) startActivity(intent);
     }
 
     @Override public void onBackPressed() { if (findViewById(R.id.AppDrawer).getVisibility() == View.VISIBLE) changeLayout(true, true); }
@@ -195,6 +199,8 @@ public class MainActivity extends Activity {
         Intent browserIntent = new Intent("android.intent.action.VIEW", Uri.parse("http://"));
         ResolveInfo resolveInfo = getPackageManager().resolveActivity(browserIntent,PackageManager.MATCH_DEFAULT_ONLY);
 
+        if (resolveInfo == null) return null;
+
         // This is the default browser's packageName
         String packageName = resolveInfo.activityInfo.packageName;
 
@@ -242,7 +248,7 @@ public class MainActivity extends Activity {
                 @SuppressWarnings("JavaReflectionMemberAccess") @SuppressLint({"WrongConstant"}) @Override public boolean onFling(MotionEvent e1, MotionEvent e2, float velocityX, float velocityY) {
                     float xDiff = e2.getX() - e1.getX();
                     float yDiff = e2.getY() - e1.getY();
-                    if (Math.abs(xDiff) > Math.abs(yDiff) && Math.abs(xDiff) > 100 && Math.abs(velocityX) > 100) startActivity((xDiff > 0)
+                    if (Math.abs(xDiff) > Math.abs(yDiff) && Math.abs(xDiff) > 100 && Math.abs(velocityX) > 100) safeStartActivity((xDiff > 0)
                             ? new Intent(canMakePhoneCall() ? Intent.ACTION_DIAL : MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA)
                             : getDefaultBrowserIntent());
                     else if (Math.abs(yDiff) > 100 && Math.abs(velocityY) > 100) {
