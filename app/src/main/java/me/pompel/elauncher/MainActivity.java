@@ -146,7 +146,7 @@ public class MainActivity extends Activity {
         for (int i = 0; i < prefs.getInt("apps", 8); i++) {
             TextView textView = new TextView(this);
             textView.setTextColor(Color.BLACK);
-            textView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 25);
+            textView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 32);
             textView.setTypeface(Typeface.create("sans-serif-bold", Typeface.NORMAL));
             textView.setPadding(0, 0, 0, 50);
             textView.setText(prefs.getString(Integer.toString(i), "App"));
