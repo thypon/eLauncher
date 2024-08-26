@@ -5,6 +5,7 @@ import android.text.SpannableString;
 import android.text.Spanned;
 import android.text.style.StyleSpan;
 import android.text.style.UnderlineSpan;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -72,6 +73,12 @@ public class recyclerAdapter extends RecyclerView.Adapter<recyclerAdapter.AppVie
                     // the match is case-insensitive and it's a fuzzy match
                     Queue<Character> appNameQueue = toCharacterList(app.appName.toString().toLowerCase());
                     Queue<Character> matchQueue = toCharacterList(charSequence.toString().toLowerCase());
+
+                    if (matchQueue.isEmpty() || appNameQueue.isEmpty()) {
+                        // GUARD: if either of the two queue are empty after construction
+                        Log.d("IMPOSSIBLE_STATE", "any of matchQueue and appNameQueue are empty after construction!");
+                        break;
+                    }
                     Stack<Integer> matchedIndexes = new Stack<>();
 
                     int i = 0;
@@ -84,6 +91,12 @@ public class recyclerAdapter extends RecyclerView.Adapter<recyclerAdapter.AppVie
 
                         appNameQueue.poll();
                         i++;
+                    }
+
+                    // if an exact match, exit and click on it
+                    if (appNameQueue.isEmpty() && matchQueue.isEmpty()) {
+                        listener.onClick(app);
+                        break;
                     }
 
                     // apply the span to the matched characters
