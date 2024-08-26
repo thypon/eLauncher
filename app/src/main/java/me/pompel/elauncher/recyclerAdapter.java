@@ -91,7 +91,7 @@ public class recyclerAdapter extends RecyclerView.Adapter<recyclerAdapter.AppVie
                     }
 
                     // if an exact match, exit and click on it
-                    if (appNameQueue.isEmpty() && matchQueue.isEmpty()) {
+                    if (app.appName.length() == charSequence.length() && appNameQueue.isEmpty() && matchQueue.isEmpty()) {
                         listener.onClick(app);
                         break;
                     }
