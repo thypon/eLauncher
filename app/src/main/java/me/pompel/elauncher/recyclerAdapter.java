@@ -54,7 +54,7 @@ public class recyclerAdapter extends RecyclerView.Adapter<recyclerAdapter.AppVie
                 List<App> filteredApps = new ArrayList<>();
 
                 if (str.isEmpty()) filteredApps = appList;
-                else for (App app : appList) if (fuzzyContains(app.appName.toString().toLowerCase(), str)) filteredApps.add(app);
+                else for (App app : appList) if (fuzzyContains(app.label().toString().toLowerCase(), str)) filteredApps.add(app);
 
                 results.count = filteredApps.size();
                 results.values = filteredApps;
@@ -68,7 +68,7 @@ public class recyclerAdapter extends RecyclerView.Adapter<recyclerAdapter.AppVie
                 for (App app : appListFiltered) {
                     // extract the app name characters which were matched by the filter
                     // the match is case-insensitive and it's a fuzzy match
-                    Queue<Character> appNameQueue = toCharacterList(app.appName.toString().toLowerCase());
+                    Queue<Character> appNameQueue = toCharacterList(app.label().toString().toLowerCase());
                     Queue<Character> matchQueue = toCharacterList(charSequence.toString().toLowerCase());
 
                     if (matchQueue.isEmpty() || appNameQueue.isEmpty()) {
@@ -98,8 +98,8 @@ public class recyclerAdapter extends RecyclerView.Adapter<recyclerAdapter.AppVie
 
                     // apply the span to the matched characters
                     for (int index : matchedIndexes) {
-                        app.appName.setSpan(new StyleSpan(Typeface.BOLD), index, index + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-                        app.appName.setSpan(new UnderlineSpan(), index, index + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                        app.label().setSpan(new StyleSpan(Typeface.BOLD), index, index + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                        app.label().setSpan(new UnderlineSpan(), index, index + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
                     }
                 }
 
@@ -137,7 +137,7 @@ public class recyclerAdapter extends RecyclerView.Adapter<recyclerAdapter.AppVie
 
     @Override
     public void onBindViewHolder(@NonNull recyclerAdapter.AppViewHolder holder, int position) {
-        SpannableString appName = appListFiltered.get(position).appName;
+        SpannableString appName = appListFiltered.get(position).label();
         holder.nameText.setText(appName);
 
         // remove all the spans after the string has been set

@@ -35,11 +35,13 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
+import java.util.Objects;
 
 public class MainActivity extends Activity {
     private ArrayList<App> appList;
-    private ArrayList<SpannableString> appNames;
+    private ArrayList<SpannableString> appLabels;
     private EditText search;
     private SharedPreferences prefs;
 
@@ -49,8 +51,8 @@ public class MainActivity extends Activity {
         Intent intent = new Intent(Intent.ACTION_MAIN, null);
         intent.addCategory(Intent.CATEGORY_LAUNCHER);
         for (ResolveInfo info : packageManager.queryIntentActivities(intent, 0)) appList.add(new App(info.loadLabel(packageManager).toString(), info.activityInfo.packageName));
-        Collections.sort(appList, (app1, app2) -> app1.appName.toString().compareToIgnoreCase(app2.appName.toString()));
-        for (App app : appList) { appNames.add(app.appName); }
+        Collections.sort(appList, (app1, app2) -> app1.label().toString().compareToIgnoreCase(app2.label().toString()));
+        for (App app : appList) { appLabels.add(app.label()); }
     }
 
     private void keyboardAction(boolean hide) {
@@ -77,12 +79,21 @@ public class MainActivity extends Activity {
         findViewById(R.id.AppDrawer).setVisibility(home ? View.GONE : View.VISIBLE);
     }
 
-    private void openAppWithIntent(Intent intent, boolean change) {
+    private void resetOpener(boolean change) {
         keyboardAction(true);
         search.setText("");
-        if (intent != null) startActivity(intent);
         if (change) changeLayout(true, false);
     }
+
+    public <T> T findElementByHashCode(Collection<T> collection, int targetHashCode) {
+        for (T element : collection) {
+            if (element.hashCode() == targetHashCode) {
+                return element;
+            }
+        }
+        return null; // Return null if no element with the target hash code is found
+    }
+
 
     @Override public void onBackPressed() { if (findViewById(R.id.AppDrawer).getVisibility() == View.VISIBLE) changeLayout(true, true); }
 
@@ -96,17 +107,13 @@ public class MainActivity extends Activity {
         window.setNavigationBarColor(Color.WHITE);
 
         appList = new ArrayList<>();
-        appNames = new ArrayList<>();
+        appLabels = new ArrayList<>();
         loadApps();
 
         RecyclerView recyclerView = findViewById(R.id.recycler_view);
         recyclerAdapter adapter = new recyclerAdapter(appList, new recyclerAdapter.RecyclerViewClickListener() {
-            @Override public void onClick(App app) { openAppWithIntent(getPackageManager().getLaunchIntentForPackage(app.packageId), true); }
-            @Override public void onLongClick(App app) {
-                Intent intent = new Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
-                intent.setData(Uri.parse("package:" + app.packageId));
-                openAppWithIntent(intent, false);
-            }
+            @Override public void onClick(App app) { app.click(MainActivity.this); resetOpener(true); }
+            @Override public void onLongClick(App app) { app.longClick(MainActivity.this); resetOpener(false); }
         });
         RecyclerView.LayoutManager layoutManager = new LinearLayoutManager(getApplicationContext());
         recyclerView.setLayoutManager(layoutManager);
@@ -140,7 +147,7 @@ public class MainActivity extends Activity {
         prefs = PreferenceManager.getDefaultSharedPreferences(this);
         LinearLayout homescreen = findViewById(R.id.HomeScreen);
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        CharSequence[] alertApps = appNames.toArray(new CharSequence[0]);
+        CharSequence[] alertApps = appLabels.toArray(new CharSequence[0]);
         for (int i = 0; i < prefs.getInt("apps", 8); i++) {
             TextView textView = new TextView(this);
             textView.setTextColor(Color.BLACK);
@@ -158,15 +165,15 @@ public class MainActivity extends Activity {
                         AlertDialog.Builder builder1 = new AlertDialog.Builder(MainActivity.this);
                         builder1.setTitle("Set app name");
                         final EditText input = new EditText(MainActivity.this);
-                        input.setText(appNames.get(which));
+                        input.setText(appLabels.get(which));
                         builder1.setView(input);
-                        input.setTag(appList.get(which).packageId);
+                        input.setTag(String.valueOf(appList.get(which).hashCode()));
                         builder1.setPositiveButton("Add", (dialog1, which1) -> {
                             String name = input.getText().toString();
                             textView.setText(name);
                             SharedPreferences.Editor editor = prefs.edit();
                             editor.putString(String.valueOf(textView.getTag()), name);
-                            editor.putString("p" + textView.getTag(), String.valueOf(input.getTag()));
+                            editor.putString("h"+textView.getTag(), String.valueOf(input.getTag()));
                             editor.apply();
                         });
                         builder1.create();
@@ -176,7 +183,11 @@ public class MainActivity extends Activity {
                     builder.show();
                     return true;
             });
-            textView.setOnClickListener(v -> openAppWithIntent(getPackageManager().getLaunchIntentForPackage(prefs.getString("p" + textView.getTag(), "")), true));
+
+            textView.setOnClickListener(v ->
+                    findElementByHashCode(
+                            appList,
+                            Integer.parseInt(Objects.requireNonNull(prefs.getString("h" + textView.getTag(), "")))).click(MainActivity.this));
             homescreen.addView(textView);
         }
         new SwipeListener(homescreen);
