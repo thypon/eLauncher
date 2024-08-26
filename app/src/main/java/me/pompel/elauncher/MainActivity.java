@@ -6,16 +6,19 @@ import androidx.recyclerview.widget.RecyclerView;
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.content.ContentResolver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
+import android.database.Cursor;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.net.Uri;
 import android.os.Bundle;
 import android.preference.PreferenceManager;
+import android.provider.Browser;
 import android.provider.MediaStore;
 import android.text.Editable;
 import android.text.InputType;
@@ -24,6 +27,7 @@ import android.text.TextWatcher;
 import android.transition.Fade;
 import android.transition.Transition;
 import android.transition.TransitionManager;
+import android.util.Log;
 import android.util.TypedValue;
 import android.view.GestureDetector;
 import android.view.MotionEvent;
@@ -42,11 +46,18 @@ import java.util.Objects;
 public class MainActivity extends Activity {
     private ArrayList<App> appList;
     private ArrayList<SpannableString> appLabels;
+
+    private ArrayList<Bookmark> bookmarkList;
+    // private ArrayList<SpannableString> bookmarkLabels;
+
+    private ArrayList<AndroidClickable> clickableList;
+
     private EditText search;
     private SharedPreferences prefs;
 
     private void loadApps() {
         appList.clear();
+        appLabels.clear();
         PackageManager packageManager = getApplicationContext().getPackageManager();
         Intent intent = new Intent(Intent.ACTION_MAIN, null);
         intent.addCategory(Intent.CATEGORY_LAUNCHER);
@@ -54,6 +65,49 @@ public class MainActivity extends Activity {
         Collections.sort(appList, (app1, app2) -> app1.label().toString().compareToIgnoreCase(app2.label().toString()));
         for (App app : appList) { appLabels.add(app.label()); }
     }
+
+    private void loadBookmarks() {
+        bookmarkList.clear();
+        // bookmarkLabels.clear();
+
+        Uri bookmarksUri = Uri.parse("content://com.android.chrome.browser/bookmarks");
+        String[] bookmarksProjection = new String[] {
+                "title",
+                "url"
+        };
+        String bookmarksSelection = "bookmark = 1 AND url IS NOT NULL"; // 1 means bookmark, 0 means history item
+
+        try (Cursor cursor = getContentResolver().query(bookmarksUri, bookmarksProjection,
+                bookmarksSelection, null, null)) {
+            if (cursor == null) {
+                Log.w(MainActivity.class.toString(), "No cursor returned for bookmark query");
+                finish();
+                return;
+            }
+            Log.i("ANTANI", "here2");
+            Log.i("ANTANI", cursor.toString());
+            Log.i("ANTANI", getBrowserPackageName());
+
+            while (cursor.moveToNext()) {
+                Log.i("ANTANI", "p"+cursor.getString(0));
+                Log.i("ANTANI", "i"+cursor.getString(1));
+
+                bookmarkList.add(new Bookmark(cursor.getString(0), cursor.getString(1)));
+            }
+        }
+        Collections.sort(bookmarkList, (bookmark1, bookmark2) -> bookmark1.label().toString().compareToIgnoreCase(bookmark2.label().toString()));
+        // for (Bookmark bookmark : bookmarkList) { bookmarkLabels.add(bookmark.label()); }
+    }
+
+    private void load() {
+        loadApps();
+        loadBookmarks();
+        clickableList.clear();
+
+        clickableList.addAll(appList);
+        clickableList.addAll(bookmarkList);
+    }
+
 
     private void keyboardAction(boolean hide) {
         InputMethodManager inputManager = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
@@ -67,7 +121,7 @@ public class MainActivity extends Activity {
     }
 
     private void changeLayout(boolean home, boolean animated) {
-        if (!home) loadApps();
+        if (!home) load();
         keyboardAction(home);
         if (animated) {
             Transition transition = new Fade();
@@ -108,12 +162,15 @@ public class MainActivity extends Activity {
 
         appList = new ArrayList<>();
         appLabels = new ArrayList<>();
-        loadApps();
+        bookmarkList = new ArrayList<>();
+        // bookmarkLabels = new ArrayList<>();
+        clickableList = new ArrayList<>();
+        load();
 
         RecyclerView recyclerView = findViewById(R.id.recycler_view);
-        recyclerAdapter adapter = new recyclerAdapter(appList, new recyclerAdapter.RecyclerViewClickListener() {
-            @Override public void onClick(App app) { app.click(MainActivity.this); resetOpener(true); }
-            @Override public void onLongClick(App app) { app.longClick(MainActivity.this); resetOpener(false); }
+        recyclerAdapter adapter = new recyclerAdapter(clickableList, new recyclerAdapter.RecyclerViewClickListener() {
+            @Override public void onClick(AndroidClickable clickable) { clickable.click(MainActivity.this); resetOpener(true); }
+            @Override public void onLongClick(AndroidClickable clickable) { clickable.longClick(MainActivity.this); resetOpener(false); }
         });
         RecyclerView.LayoutManager layoutManager = new LinearLayoutManager(getApplicationContext());
         recyclerView.setLayoutManager(layoutManager);
@@ -158,7 +215,7 @@ public class MainActivity extends Activity {
             textView.setTag(i);
             textView.setLayoutParams(params);
             textView.setOnLongClickListener(v -> {
-                    loadApps();
+                    load();
                     AlertDialog.Builder builder = new AlertDialog.Builder(MainActivity.this);
                     builder.setTitle("Select app");
                     builder.setItems(alertApps, (dialog, which) -> {
@@ -201,14 +258,17 @@ public class MainActivity extends Activity {
         return intent.resolveActivity(packageManager) != null;
     }
 
-    private Intent getDefaultBrowserIntent() {
-        Intent browserIntent = new Intent("android.intent.action.VIEW", Uri.parse("http://"));  
+    private String getBrowserPackageName() {
+        Intent browserIntent = new Intent("android.intent.action.VIEW", Uri.parse("http://"));
         ResolveInfo resolveInfo = getPackageManager().resolveActivity(browserIntent,PackageManager.MATCH_DEFAULT_ONLY);
 
         // This is the default browser's packageName
-        String packageName = resolveInfo.activityInfo.packageName;
+        return resolveInfo.activityInfo.packageName;
+    }
 
-        return getPackageManager().getLaunchIntentForPackage(packageName);
+    private Intent getDefaultBrowserIntent() {
+
+        return getPackageManager().getLaunchIntentForPackage(getBrowserPackageName());
     }
 
     private class SwipeListener implements View.OnTouchListener {

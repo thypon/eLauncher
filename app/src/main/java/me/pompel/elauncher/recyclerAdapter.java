@@ -21,13 +21,13 @@ import java.util.Stack;
 import java.util.stream.Collectors;
 
 public class recyclerAdapter extends RecyclerView.Adapter<recyclerAdapter.AppViewHolder> implements Filterable {
-    private final ArrayList<App> appList;
-    private ArrayList<App> appListFiltered;
+    private final ArrayList<AndroidClickable> clickableList;
+    private ArrayList<AndroidClickable> clickableFiltered;
     private final RecyclerViewClickListener listener;
 
-    public recyclerAdapter(ArrayList<App> appList, RecyclerViewClickListener listener) {
-        this.appList = appList;
-        this.appListFiltered = appList;
+    public recyclerAdapter(ArrayList<AndroidClickable> clickableList, RecyclerViewClickListener listener) {
+        this.clickableList = clickableList;
+        this.clickableFiltered = clickableList;
         this.listener = listener;
     }
 
@@ -51,59 +51,59 @@ public class recyclerAdapter extends RecyclerView.Adapter<recyclerAdapter.AppVie
             protected FilterResults performFiltering(CharSequence charSequence) {
                 String str = charSequence.toString().toLowerCase();
                 FilterResults results = new FilterResults();
-                List<App> filteredApps = new ArrayList<>();
+                List<AndroidClickable> filteredClickables = new ArrayList<>();
 
-                if (str.isEmpty()) filteredApps = appList;
-                else for (App app : appList) if (fuzzyContains(app.label().toString().toLowerCase(), str)) filteredApps.add(app);
+                if (str.isEmpty()) filteredClickables = clickableList;
+                else for (AndroidClickable clickable : clickableList) if (fuzzyContains(clickable.label().toString().toLowerCase(), str)) filteredClickables.add(clickable);
 
-                results.count = filteredApps.size();
-                results.values = filteredApps;
+                results.count = filteredClickables.size();
+                results.values = filteredClickables;
                 return results;
             }
 
             @Override
             protected void publishResults(CharSequence charSequence, FilterResults filterResults) {
-                appListFiltered = (ArrayList<App>)filterResults.values;
+                clickableFiltered = (ArrayList<AndroidClickable>) filterResults.values;
 
-                for (App app : appListFiltered) {
-                    // extract the app name characters which were matched by the filter
+                for (AndroidClickable clickable : clickableFiltered) {
+                    // extract the clickable name characters which were matched by the filter
                     // the match is case-insensitive and it's a fuzzy match
-                    Queue<Character> appNameQueue = toCharacterList(app.label().toString().toLowerCase());
+                    Queue<Character> clickableNameQueue = toCharacterList(clickable.label().toString().toLowerCase());
                     Queue<Character> matchQueue = toCharacterList(charSequence.toString().toLowerCase());
 
-                    if (matchQueue.isEmpty() || appNameQueue.isEmpty()) {
+                    if (matchQueue.isEmpty() || clickableNameQueue.isEmpty()) {
                         // GUARD: if either of the two queue are empty after construction
-                        Log.d("IMPOSSIBLE_STATE", "any of matchQueue and appNameQueue are empty after construction!");
+                        Log.d("IMPOSSIBLE_STATE", "any of matchQueue and clickableNameQueue are empty after construction!");
                         break;
                     }
                     Stack<Integer> matchedIndexes = new Stack<>();
 
                     int i = 0;
                     
-                    while (!appNameQueue.isEmpty() && !matchQueue.isEmpty()) {
-                        if (appNameQueue.peek() == matchQueue.peek()) {
+                    while (!clickableNameQueue.isEmpty() && !matchQueue.isEmpty()) {
+                        if (clickableNameQueue.peek() == matchQueue.peek()) {
                             matchedIndexes.push(i);
                             matchQueue.poll();
                         }
 
-                        appNameQueue.poll();
+                        clickableNameQueue.poll();
                         i++;
                     }
 
                     // if an exact match, exit and click on it
-                    if (appNameQueue.isEmpty() && matchQueue.isEmpty()) {
-                        listener.onClick(app);
+                    if (clickableNameQueue.isEmpty() && matchQueue.isEmpty()) {
+                        listener.onClick(clickable);
                         break;
                     }
 
                     // apply the span to the matched characters
                     for (int index : matchedIndexes) {
-                        app.label().setSpan(new StyleSpan(Typeface.BOLD), index, index + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-                        app.label().setSpan(new UnderlineSpan(), index, index + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                        clickable.label().setSpan(new StyleSpan(Typeface.BOLD), index, index + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                        clickable.label().setSpan(new UnderlineSpan(), index, index + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
                     }
                 }
 
-                if (appListFiltered.size() == 1) listener.onClick(appListFiltered.get(0));
+                if (clickableFiltered.size() == 1) listener.onClick(clickableFiltered.get(0));
                 notifyDataSetChanged();
             }
         };
@@ -113,11 +113,11 @@ public class recyclerAdapter extends RecyclerView.Adapter<recyclerAdapter.AppVie
         private final TextView nameText;
 
         @Override
-        public void onClick(View view) { listener.onClick(appListFiltered.get(getAdapterPosition())); }
+        public void onClick(View view) { listener.onClick(clickableFiltered.get(getAdapterPosition())); }
 
         @Override
         public boolean onLongClick(View view) {
-            listener.onLongClick(appListFiltered.get(getAdapterPosition()));
+            listener.onLongClick(clickableFiltered.get(getAdapterPosition()));
             return true;
         }
 
@@ -137,23 +137,23 @@ public class recyclerAdapter extends RecyclerView.Adapter<recyclerAdapter.AppVie
 
     @Override
     public void onBindViewHolder(@NonNull recyclerAdapter.AppViewHolder holder, int position) {
-        SpannableString appName = appListFiltered.get(position).label();
-        holder.nameText.setText(appName);
+        SpannableString clickableName = clickableFiltered.get(position).label();
+        holder.nameText.setText(clickableName);
 
         // remove all the spans after the string has been set
-        Object[] spans = appName.getSpans(0, appName.length(), Object.class);
+        Object[] spans = clickableName.getSpans(0, clickableName.length(), Object.class);
         for (Object span : spans) {
-            appName.removeSpan(span);
+            clickableName.removeSpan(span);
         }
     }
 
     @Override
     public int getItemCount() {
-        return appListFiltered.size();
+        return clickableFiltered.size();
     }
 
     public interface RecyclerViewClickListener {
-        void onClick(App app);
-        void onLongClick(App app);
+        void onClick(AndroidClickable clickable);
+        void onLongClick(AndroidClickable clickable);
     }
 }
