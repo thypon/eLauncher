@@ -6,13 +6,15 @@ eLauncher favours easy readibility on eInk/ePaper devices, such as the Onyx Boox
 
 ## Features
 
-- Extremely lightweight: only 779KB
-- eInk friendly: uses a light theme by default
+- Extremely lightweight: only 708KB
+- eInk friendly: uses a light theme by default, fix text size and weight
+- Fuzzy Search: search for apps by typing their name
+- Bottom search bar in app drawer
 
 - Homescreen and app drawer: swipe up on homescreen to enter the app drawer
 - Long press an app field on the homescreen to assign an app, app can be renamed
 - Type to search in app drawer, if only one result is left, it is automatically launched (like OLauncher)
-- Gestures: swipe down for notification center, left for browser app, right for phone app, double tap to open app drawer with keyboard
+- Gestures: swipe down for notification center, left for browser app, right for phone app, double tap to open the original launcher
 - Hold on empty space to change the number of apps on homescreen
 
 ## apk size differences with OLauncher Light
