@@ -1,4 +1,10 @@
 package me.pompel.elauncher;
+import android.graphics.Typeface;
+import android.os.Build;
+import android.text.SpannableString;
+import android.text.Spanned;
+import android.text.style.StyleSpan;
+import android.text.style.UnderlineSpan;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -6,9 +12,15 @@ import android.widget.Filter;
 import android.widget.Filterable;
 import android.widget.TextView;
 import androidx.annotation.NonNull;
+import androidx.annotation.RequiresApi;
 import androidx.recyclerview.widget.RecyclerView;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.LinkedList;
 import java.util.List;
+import java.util.Queue;
+import java.util.Stack;
+import java.util.stream.Collectors;
 
 public class recyclerAdapter extends RecyclerView.Adapter<recyclerAdapter.AppViewHolder> implements Filterable {
     private final ArrayList<App> appList;
@@ -30,6 +42,10 @@ public class recyclerAdapter extends RecyclerView.Adapter<recyclerAdapter.AppVie
         return true;
     }
 
+    private static LinkedList<Character> toCharacterList(String str) {
+        return new LinkedList<>(str.chars().mapToObj(e -> (char)e).collect(Collectors.toList()));
+    }
+
     @Override
     public Filter getFilter() {
         return new Filter() {
@@ -40,7 +56,7 @@ public class recyclerAdapter extends RecyclerView.Adapter<recyclerAdapter.AppVie
                 List<App> filteredApps = new ArrayList<>();
 
                 if (str.isEmpty()) filteredApps = appList;
-                else for (App app : appList) if (fuzzyContains(app.appName.toLowerCase(), str)) filteredApps.add(app);
+                else for (App app : appList) if (fuzzyContains(app.appName.toString().toLowerCase(), str)) filteredApps.add(app);
 
                 results.count = filteredApps.size();
                 results.values = filteredApps;
@@ -50,6 +66,33 @@ public class recyclerAdapter extends RecyclerView.Adapter<recyclerAdapter.AppVie
             @Override
             protected void publishResults(CharSequence charSequence, FilterResults filterResults) {
                 appListFiltered = (ArrayList<App>)filterResults.values;
+
+                for (App app : appListFiltered) {
+                    // extract the app name characters which were matched by the filter
+                    // the match is case-insensitive and it's a fuzzy match
+                    Queue<Character> appNameQueue = toCharacterList(app.appName.toString().toLowerCase());
+                    Queue<Character> matchQueue = toCharacterList(charSequence.toString().toLowerCase());
+                    Stack<Integer> matchedIndexes = new Stack<>();
+
+                    int i = 0;
+                    
+                    while (!appNameQueue.isEmpty() && !matchQueue.isEmpty()) {
+                        if (appNameQueue.peek() == matchQueue.peek()) {
+                            matchedIndexes.push(i);
+                            matchQueue.poll();
+                        }
+
+                        appNameQueue.poll();
+                        i++;
+                    }
+
+                    // apply the span to the matched characters
+                    for (int index : matchedIndexes) {
+                        app.appName.setSpan(new StyleSpan(Typeface.BOLD), index, index + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                        app.appName.setSpan(new UnderlineSpan(), index, index + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                    }
+                }
+
                 if (appListFiltered.size() == 1) listener.onClick(appListFiltered.get(0));
                 notifyDataSetChanged();
             }
@@ -84,7 +127,14 @@ public class recyclerAdapter extends RecyclerView.Adapter<recyclerAdapter.AppVie
 
     @Override
     public void onBindViewHolder(@NonNull recyclerAdapter.AppViewHolder holder, int position) {
-        holder.nameText.setText(appListFiltered.get(position).appName);
+        SpannableString appName = appListFiltered.get(position).appName;
+        holder.nameText.setText(appName);
+
+        // remove all the spans after the string has been set
+        Object[] spans = appName.getSpans(0, appName.length(), Object.class);
+        for (Object span : spans) {
+            appName.removeSpan(span);
+        }
     }
 
     @Override

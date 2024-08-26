@@ -21,6 +21,7 @@ import android.preference.PreferenceManager;
 import android.provider.MediaStore;
 import android.text.Editable;
 import android.text.InputType;
+import android.text.SpannableString;
 import android.text.TextWatcher;
 import android.transition.Fade;
 import android.transition.Transition;
@@ -40,7 +41,7 @@ import java.util.Collections;
 
 public class MainActivity extends Activity {
     private ArrayList<App> appList;
-    private ArrayList<String> appNames;
+    private ArrayList<SpannableString> appNames;
     private EditText search;
     private SharedPreferences prefs;
 
@@ -50,7 +51,7 @@ public class MainActivity extends Activity {
         Intent intent = new Intent(Intent.ACTION_MAIN, null);
         intent.addCategory(Intent.CATEGORY_LAUNCHER);
         for (ResolveInfo info : packageManager.queryIntentActivities(intent, 0)) appList.add(new App(info.loadLabel(packageManager).toString(), info.activityInfo.packageName));
-        Collections.sort(appList, (app1, app2) -> app1.appName.compareToIgnoreCase(app2.appName));
+        Collections.sort(appList, (app1, app2) -> app1.appName.toString().compareToIgnoreCase(app2.appName.toString()));
         for (App app : appList) { appNames.add(app.appName); }
     }
 
