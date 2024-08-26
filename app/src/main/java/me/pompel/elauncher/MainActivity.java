@@ -218,7 +218,7 @@ public class MainActivity extends Activity {
                             catch (Exception e) { e.printStackTrace(); }
                         else {
                             changeLayout(false, true);
-                            keyboardAction(true);
+                            keyboardAction(false);
                         }
                     }
                     return true;
@@ -226,7 +226,6 @@ public class MainActivity extends Activity {
 
                 @Override public boolean onDoubleTap(MotionEvent e) {
                     changeLayout(false, true);
-                    keyboardAction(false);
                     return true;
                 }
 
