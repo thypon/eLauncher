@@ -6,11 +6,13 @@ import androidx.recyclerview.widget.RecyclerView;
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.content.ContentResolver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
+import android.database.Cursor;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.net.Uri;
@@ -24,6 +26,7 @@ import android.text.TextWatcher;
 import android.transition.Fade;
 import android.transition.Transition;
 import android.transition.TransitionManager;
+import android.util.Log;
 import android.util.TypedValue;
 import android.view.GestureDetector;
 import android.view.MotionEvent;
@@ -43,6 +46,36 @@ public class MainActivity extends Activity {
     private ArrayList<SpannableString> appNames;
     private EditText search;
     private SharedPreferences prefs;
+
+    private static final String ELAUNCHER_TAG = "eLauncher";
+    private static final String BIGME_LAUNCHER_AUTHORITY = "com.xrz.ebook.launcher.provider.LauncherProvider";
+    private static final Uri BIGME_CONTENT_URI = Uri.parse("content://" + BIGME_LAUNCHER_AUTHORITY);
+
+    private static void queryLauncherProvider(@NonNull Context context) {
+        ContentResolver contentResolver = context.getContentResolver();
+        Cursor cursor = null;
+
+        try {
+            Log.d(ELAUNCHER_TAG, "query started");
+            cursor = contentResolver.query(BIGME_CONTENT_URI, null, null, null, null);
+            Log.d(ELAUNCHER_TAG, "no failure yet");
+            if (cursor != null && cursor.moveToFirst()) {
+                do {
+                    // Process each row in the cursor
+                    // Example: Get data from the cursor
+                    String columnName = cursor.getColumnName(0);
+                    String columnValue = cursor.getString(0);
+                    Log.d(ELAUNCHER_TAG, columnName + ": " + columnValue);
+                } while (cursor.moveToNext());
+            }
+        } catch (Exception e) {
+            Log.e(ELAUNCHER_TAG, "Query failed", e);
+        } finally {
+            if (cursor != null) {
+                cursor.close();
+            }
+        }
+    }
 
     private void loadApps() {
         appList.clear();
@@ -90,6 +123,11 @@ public class MainActivity extends Activity {
     }
 
     @Override public void onBackPressed() { if (findViewById(R.id.AppDrawer).getVisibility() == View.VISIBLE) changeLayout(true, true); }
+
+    @Override protected void onStart() {
+        super.onStart();
+        queryLauncherProvider(this);
+    }
 
     @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
