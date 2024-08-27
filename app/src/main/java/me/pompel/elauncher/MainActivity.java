@@ -118,15 +118,20 @@ public class MainActivity extends Activity {
         recyclerView.setAdapter(adapter);
 
         recyclerView.addOnScrollListener(new RecyclerView.OnScrollListener() {
-           private boolean onTop = false;
+            private boolean onTop = false;
+            private boolean onBottom = false;
+
             @Override public void onScrollStateChanged(@NonNull RecyclerView recyclerView, int newState) {
                 super.onScrollStateChanged(recyclerView, newState);
                 if (newState == RecyclerView.SCREEN_STATE_ON) {
                     onTop = !recyclerView.canScrollVertically(-1);
+                    onBottom = !recyclerView.canScrollVertically(1);
                     if (onTop) keyboardAction(true);
                 } else if (newState == RecyclerView.SCREEN_STATE_OFF) {
-                    if (!recyclerView.canScrollVertically(1)) keyboardAction(true);
-                    else if (!recyclerView.canScrollVertically(-1)) {
+                    if (!recyclerView.canScrollVertically(1)) {
+                        if (onBottom) changeLayout(true, true);
+                        else keyboardAction(true);
+                    } else if (!recyclerView.canScrollVertically(-1)) {
                         if (onTop) changeLayout(true, true);
                         else keyboardAction(true);
                     }
