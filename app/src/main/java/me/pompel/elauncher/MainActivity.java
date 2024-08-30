@@ -47,6 +47,7 @@ import android.widget.TextView;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Set;
 import java.util.SortedMap;
@@ -59,6 +60,7 @@ public class MainActivity extends Activity {
     private SharedPreferences prefs;
 
     private static final String ELAUNCHER_TAG = "eLauncher";
+    private static final String ELAUNCHER_PACKAGE = "me.pompel.elauncher";
     private static final String BIGME_LAUNCHER_AUTHORITY = "com.xrz.ebook.launcher.provider.LauncherProvider";
     private static final Uri BIGME_CONTENT_URI = Uri.parse("content://" + BIGME_LAUNCHER_AUTHORITY);
     private recyclerAdapter adapter;
@@ -135,8 +137,12 @@ public class MainActivity extends Activity {
 
         if (home) {
             LinearLayout homescreen = findViewById(R.id.HomeScreen);
-    
-            for (int i = 0; i < homescreen.getChildCount(); i++) {
+
+            int length = hasUsageStatsPermission() ?
+                    homescreen.getChildCount() :
+                    homescreen.getChildCount()-1;
+
+            for (int i = 0; i < length; i++) {
                 View view = homescreen.getChildAt(i);
                 if (view instanceof TextView) {
                     TextView textView = (TextView) view;
@@ -146,6 +152,14 @@ public class MainActivity extends Activity {
                         spannableAppName.setSpan(new UnderlineSpan(), 0, spannableAppName.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
                         textView.setText(spannableAppName);
                     }
+                }
+            }
+
+            if (hasUsageStatsPermission()) {
+                View view = homescreen.getChildAt(homescreen.getChildCount()-1);
+                if (view instanceof TextView) {
+                    TextView textView = (TextView) view;
+                    textView.setText(getNameByPackageName(lastActiveProcessPackage()));
                 }
             }
         } else {
@@ -176,6 +190,8 @@ public class MainActivity extends Activity {
     @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+
+        prefs = PreferenceManager.getDefaultSharedPreferences(this);
 
         // if it does not have USAGE_STATS and it's the first launch, open settings
         if (!hasUsageStatsPermission() && !prefs.getBoolean("firstLaunch", false)) {
@@ -260,11 +276,11 @@ public class MainActivity extends Activity {
             }
         });
 
-        prefs = PreferenceManager.getDefaultSharedPreferences(this);
         LinearLayout homescreen = findViewById(R.id.HomeScreen);
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
         CharSequence[] alertApps = appNames.toArray(new CharSequence[0]);
-        for (int i = 0; i < prefs.getInt("apps", 8); i++) {
+        int i = 0;
+        for (i = 0; i < prefs.getInt("apps", 8); i++) {
             TextView textView = new TextView(this);
             textView.setTextColor(Color.BLACK);
             textView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 32);
@@ -302,6 +318,21 @@ public class MainActivity extends Activity {
             textView.setOnClickListener(v -> openAppWithIntent(getPackageManager().getLaunchIntentForPackage(prefs.getString("p" + textView.getTag(), "")), true));
             homescreen.addView(textView);
         }
+
+        if (hasUsageStatsPermission()) {
+            TextView textView = new TextView(this);
+            textView.setTextColor(Color.BLACK);
+            textView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 32);
+            textView.setTypeface(Typeface.create("sans-serif-bold", Typeface.ITALIC));
+            textView.setPadding(0, 0, 0, 50);
+            String lastAppName = getNameByPackageName(lastActiveProcessPackage());
+            textView.setText(lastAppName != null ? lastAppName : "Last App");
+            textView.setTag(i);
+            textView.setLayoutParams(params);
+            textView.setOnClickListener(v -> openAppWithIntent(getPackageManager().getLaunchIntentForPackage(lastActiveProcessPackage()), true));
+            homescreen.addView(textView);
+        }
+
         new SwipeListener(homescreen);
 
     }
@@ -310,7 +341,11 @@ public class MainActivity extends Activity {
         LinearLayout homescreen = findViewById(R.id.HomeScreen);
         Set<String> activeProcessPackages = listActiveProcessPackages();
 
-        for (int i = 0; i < homescreen.getChildCount(); i++) {
+        int length = hasUsageStatsPermission() ?
+                homescreen.getChildCount() :
+                homescreen.getChildCount()-1;
+
+        for (int i = 0; i < length; i++) {
             View view = homescreen.getChildAt(i);
             if (view instanceof TextView) {
                 TextView textView = (TextView) view;
@@ -320,6 +355,14 @@ public class MainActivity extends Activity {
                     spannableAppName.setSpan(new UnderlineSpan(), 0, spannableAppName.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
                     textView.setText(spannableAppName);
                 }
+            }
+        }
+
+        if (hasUsageStatsPermission()) {
+            View view = homescreen.getChildAt(homescreen.getChildCount()-1);
+            if (view instanceof TextView) {
+                TextView textView = (TextView) view;
+                textView.setText(getNameByPackageName(lastActiveProcessPackage()));
             }
         }
     }
@@ -337,19 +380,22 @@ public class MainActivity extends Activity {
         return intent.resolveActivity(packageManager) != null;
     }
 
-    private Intent getDefaultBrowserIntent() {
+    private String getDefaultBrowserPackage() {
         Intent browserIntent = new Intent("android.intent.action.VIEW", Uri.parse("http://"));
         ResolveInfo resolveInfo = getPackageManager().resolveActivity(browserIntent,PackageManager.MATCH_DEFAULT_ONLY);
 
         if (resolveInfo == null) return null;
 
         // This is the default browser's packageName
-        String packageName = resolveInfo.activityInfo.packageName;
-
-        return getPackageManager().getLaunchIntentForPackage(packageName);
+        return resolveInfo.activityInfo.packageName;
     }
 
-    public Intent getLastLauncherIntent() {
+    private Intent getDefaultBrowserIntent() {
+        return getPackageManager().getLaunchIntentForPackage(getDefaultBrowserPackage());
+    }
+
+    private List<ResolveInfo> getLaunchersResolveInfos() {
+        List<ResolveInfo> launchers = new LinkedList<ResolveInfo>();
         PackageManager packageManager = getPackageManager();
         Intent intent = new Intent(Intent.ACTION_MAIN);
         intent.addCategory(Intent.CATEGORY_LAUNCHER);
@@ -358,19 +404,37 @@ public class MainActivity extends Activity {
 
         List<ResolveInfo> resolveInfoList = packageManager.queryIntentActivities(intent, 0);
         String currentPackageName = getPackageName();
-        ResolveInfo lastLauncher = null;
 
         for (ResolveInfo resolveInfo : resolveInfoList) {
             String packageName = resolveInfo.activityInfo.packageName;
             if (!packageName.equals(currentPackageName)) {
-                lastLauncher = resolveInfo;
+                launchers.add(resolveInfo);
             }
         }
+
+        return launchers;
+    }
+
+    private String getDefaultPhoneAppPackage() {
+        Intent phoneIntent = new Intent(Intent.ACTION_DIAL);
+        ResolveInfo resolveInfo = getPackageManager().resolveActivity(phoneIntent, PackageManager.MATCH_DEFAULT_ONLY);
+
+        if (resolveInfo == null) return null;
+
+        return resolveInfo.activityInfo.packageName;
+    }
+
+    public Intent getLastLauncherIntent() {
+        ResolveInfo[] launcherResolveInfos = (ResolveInfo[]) getLaunchersResolveInfos().toArray();
+        ResolveInfo lastLauncher = launcherResolveInfos[launcherResolveInfos.length-1];
 
         if (lastLauncher != null) {
             String packageName = lastLauncher.activityInfo.packageName;
 
-            // get intent for activity
+            Intent intent = new Intent(Intent.ACTION_MAIN);
+            intent.addCategory(Intent.CATEGORY_LAUNCHER);
+            intent.addCategory(Intent.CATEGORY_HOME);
+            intent.addCategory(Intent.CATEGORY_DEFAULT);
             intent.setPackage(packageName);
             intent.setClassName(packageName, lastLauncher.activityInfo.name);
             intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
@@ -461,5 +525,63 @@ public class MainActivity extends Activity {
         }
 
         return activePackages;
+    }
+
+    private List<String> getHomescreenPackages() {
+        int len = prefs.getInt("apps", 8);
+        List<String> homescreenPackages = new LinkedList<>();
+
+        for (int i = 0; i < len; i++) {
+            String pkg = prefs.getString("p" + i, "");
+            if (!pkg.isEmpty()) {
+                homescreenPackages.add(pkg);
+            }
+        }
+
+        return homescreenPackages;
+    }
+
+    private String getNameByPackageName(String pkg) {
+        for (App app : appList) {
+            if (app.packageId.equals(pkg))
+                return app.appName.toString();
+        }
+
+        return null;
+    }
+
+    private String lastActiveProcessPackage() {
+        Set<String> excludePackages = new HashSet<>();
+
+        excludePackages.add(getDefaultBrowserPackage());
+        getLaunchersResolveInfos().forEach(resolveInfo -> excludePackages.add(resolveInfo.activityInfo.packageName));
+        excludePackages.add(getDefaultPhoneAppPackage());
+        excludePackages.add(ELAUNCHER_PACKAGE);
+        excludePackages.addAll(getHomescreenPackages());
+
+        UsageStatsManager mUsageStatsManager = (UsageStatsManager)getSystemService(Context.USAGE_STATS_SERVICE);
+        long endTime = System.currentTimeMillis();
+        long beginTime = endTime - 1000*10; // last 10 minutes
+
+        // We get usage stats for the last day
+        List<UsageStats> stats = mUsageStatsManager.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, beginTime, endTime);
+
+        // Sort the stats by the last time used
+        if(stats != null)
+        {
+            SortedMap<Long,UsageStats> mySortedMap = new TreeMap<Long,UsageStats>();
+            for (UsageStats usageStats : stats)
+            {
+                if (excludePackages.contains(usageStats.getPackageName())) continue;
+                if (getPackageManager().getLaunchIntentForPackage(usageStats.getPackageName()) == null) continue;
+                mySortedMap.put(usageStats.getLastTimeUsed(),usageStats);
+            }
+            if(mySortedMap != null && !mySortedMap.isEmpty())
+            {
+                return mySortedMap.get(mySortedMap.lastKey()).getPackageName();
+            }
+        }
+
+        return "";
     }
 }
