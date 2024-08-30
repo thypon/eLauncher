@@ -149,7 +149,7 @@ public class MainActivity extends Activity {
                     String packageName = prefs.getString("p" + textView.getTag(), "");
                     if (activeProcessPackages.contains(packageName)) {
                         SpannableString spannableAppName = new SpannableString(textView.getText());
-                        spannableAppName.setSpan(new UnderlineSpan(), 0, spannableAppName.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                        spannableAppName.setSpan(new StyleSpan(Typeface.BOLD), 0, spannableAppName.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
                         textView.setText(spannableAppName);
                     }
                 }
@@ -284,7 +284,7 @@ public class MainActivity extends Activity {
             TextView textView = new TextView(this);
             textView.setTextColor(Color.BLACK);
             textView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 32);
-            textView.setTypeface(Typeface.create("sans-serif-bold", Typeface.NORMAL));
+            textView.setTypeface(Typeface.create(!hasUsageStatsPermission() ? "sans-serif" : "sans-serif-light", Typeface.NORMAL));
             textView.setPadding(0, 0, 0, 50);
             textView.setText(prefs.getString(Integer.toString(i), "App"));
             textView.setTag(i);
@@ -323,13 +323,16 @@ public class MainActivity extends Activity {
             TextView textView = new TextView(this);
             textView.setTextColor(Color.BLACK);
             textView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 32);
-            textView.setTypeface(Typeface.create("sans-serif-bold", Typeface.ITALIC));
+            textView.setTypeface(Typeface.create("sans-serif", Typeface.ITALIC));
             textView.setPadding(0, 0, 0, 50);
             String lastAppName = getNameByPackageName(lastActiveProcessPackage());
             textView.setText(lastAppName != null ? lastAppName : "Last App");
             textView.setTag(i);
             textView.setLayoutParams(params);
-            textView.setOnClickListener(v -> openAppWithIntent(getPackageManager().getLaunchIntentForPackage(lastActiveProcessPackage()), true));
+            textView.setOnClickListener(v -> {
+                String pkg = lastActiveProcessPackage();
+                if (pkg != null) openAppWithIntent(getPackageManager().getLaunchIntentForPackage(pkg), true);
+            });
             homescreen.addView(textView);
         }
 
@@ -352,7 +355,7 @@ public class MainActivity extends Activity {
                 String packageName = prefs.getString("p" + textView.getTag(), "");
                 if (activeProcessPackages.contains(packageName)) {
                     SpannableString spannableAppName = new SpannableString(textView.getText());
-                    spannableAppName.setSpan(new UnderlineSpan(), 0, spannableAppName.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                    spannableAppName.setSpan(new StyleSpan(Typeface.BOLD), 0, spannableAppName.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
                     textView.setText(spannableAppName);
                 }
             }
@@ -500,7 +503,7 @@ public class MainActivity extends Activity {
         Set<String> activePackages = new HashSet<>();
         UsageStatsManager mUsageStatsManager = (UsageStatsManager)getSystemService(Context.USAGE_STATS_SERVICE);
         long endTime = System.currentTimeMillis();
-        long beginTime = endTime - 1000*10; // last 10 minutes
+        long beginTime = endTime - 1000*60*60; // last 60 minutes
 
         // We get usage stats for the last day
         List<UsageStats> stats = mUsageStatsManager.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, beginTime, endTime);
@@ -511,7 +514,8 @@ public class MainActivity extends Activity {
             SortedMap<Long,UsageStats> mySortedMap = new TreeMap<Long,UsageStats>();
             for (UsageStats usageStats : stats)
             {
-                mySortedMap.put(usageStats.getLastTimeUsed(),usageStats);
+                if (usageStats.getLastTimeUsed() < beginTime) continue;
+                mySortedMap.put(usageStats.getLastTimeUsed(), usageStats);
             }
             if(mySortedMap != null && !mySortedMap.isEmpty())
             {
@@ -561,7 +565,7 @@ public class MainActivity extends Activity {
 
         UsageStatsManager mUsageStatsManager = (UsageStatsManager)getSystemService(Context.USAGE_STATS_SERVICE);
         long endTime = System.currentTimeMillis();
-        long beginTime = endTime - 1000*10; // last 10 minutes
+        long beginTime = endTime - 1000*60*10; // last 10 minutes
 
         // We get usage stats for the last day
         List<UsageStats> stats = mUsageStatsManager.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, beginTime, endTime);
@@ -572,6 +576,7 @@ public class MainActivity extends Activity {
             SortedMap<Long,UsageStats> mySortedMap = new TreeMap<Long,UsageStats>();
             for (UsageStats usageStats : stats)
             {
+                if (usageStats.getLastTimeUsed() < beginTime) continue;
                 if (excludePackages.contains(usageStats.getPackageName())) continue;
                 if (getPackageManager().getLaunchIntentForPackage(usageStats.getPackageName()) == null) continue;
                 mySortedMap.put(usageStats.getLastTimeUsed(),usageStats);
