@@ -5,7 +5,10 @@ import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 import android.annotation.SuppressLint;
 import android.app.Activity;
+import android.app.AppOpsManager;
 import android.app.AlertDialog;
+import android.app.usage.UsageStats;
+import android.app.usage.UsageStatsManager;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.content.Intent;
@@ -19,10 +22,14 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.preference.PreferenceManager;
 import android.provider.MediaStore;
+import android.provider.Settings;
 import android.text.Editable;
 import android.text.InputType;
 import android.text.SpannableString;
+import android.text.Spanned;
 import android.text.TextWatcher;
+import android.text.style.StyleSpan;
+import android.text.style.UnderlineSpan;
 import android.transition.Fade;
 import android.transition.Transition;
 import android.transition.TransitionManager;
@@ -39,7 +46,11 @@ import android.widget.TextView;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
+import java.util.SortedMap;
+import java.util.TreeMap;
 
 public class MainActivity extends Activity {
     private ArrayList<App> appList;
@@ -50,6 +61,7 @@ public class MainActivity extends Activity {
     private static final String ELAUNCHER_TAG = "eLauncher";
     private static final String BIGME_LAUNCHER_AUTHORITY = "com.xrz.ebook.launcher.provider.LauncherProvider";
     private static final Uri BIGME_CONTENT_URI = Uri.parse("content://" + BIGME_LAUNCHER_AUTHORITY);
+    private recyclerAdapter adapter;
 
     private static void queryLauncherProvider(@NonNull Context context) {
         ContentResolver contentResolver = context.getContentResolver();
@@ -79,12 +91,21 @@ public class MainActivity extends Activity {
 
     private void loadApps() {
         appList.clear();
+
+        Set<String> activeProcessPackages = listActiveProcessPackages();
+
         PackageManager packageManager = getApplicationContext().getPackageManager();
         Intent intent = new Intent(Intent.ACTION_MAIN, null);
         intent.addCategory(Intent.CATEGORY_LAUNCHER);
         for (ResolveInfo info : packageManager.queryIntentActivities(intent, 0)) appList.add(new App(info.loadLabel(packageManager).toString(), info.activityInfo.packageName));
         Collections.sort(appList, (app1, app2) -> app1.appName.toString().compareToIgnoreCase(app2.appName.toString()));
-        for (App app : appList) { appNames.add(app.appName); }
+        for (App app : appList) {
+            appNames.add(app.appName);
+
+            if (activeProcessPackages.contains(app.packageId)) {
+                app.appName.setSpan(new StyleSpan(Typeface.BOLD), 0, app.appName.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            }
+        }
     }
 
     private void keyboardAction(boolean hide) {
@@ -109,6 +130,27 @@ public class MainActivity extends Activity {
         }
         findViewById(R.id.HomeScreen).setVisibility(home ? View.VISIBLE : View.GONE);
         findViewById(R.id.AppDrawer).setVisibility(home ? View.GONE : View.VISIBLE);
+
+        Set<String> activeProcessPackages = listActiveProcessPackages();
+
+        if (home) {
+            LinearLayout homescreen = findViewById(R.id.HomeScreen);
+    
+            for (int i = 0; i < homescreen.getChildCount(); i++) {
+                View view = homescreen.getChildAt(i);
+                if (view instanceof TextView) {
+                    TextView textView = (TextView) view;
+                    String packageName = prefs.getString("p" + textView.getTag(), "");
+                    if (activeProcessPackages.contains(packageName)) {
+                        SpannableString spannableAppName = new SpannableString(textView.getText());
+                        spannableAppName.setSpan(new UnderlineSpan(), 0, spannableAppName.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                        textView.setText(spannableAppName);
+                    }
+                }
+            }
+        } else {
+            adapter.setProcessPackages(activeProcessPackages);
+        }
     }
 
     private void openAppWithIntent(Intent intent, boolean change) {
@@ -122,16 +164,30 @@ public class MainActivity extends Activity {
         if (intent != null) startActivity(intent);
     }
 
-    @Override public void onBackPressed() { if (findViewById(R.id.AppDrawer).getVisibility() == View.VISIBLE) changeLayout(true, true); }
-
-    @Override protected void onStart() {
-        super.onStart();
-        queryLauncherProvider(this);
+    // check if you have USAGE_STATS permission
+    private boolean hasUsageStatsPermission() {
+        AppOpsManager appOps = (AppOpsManager) getSystemService(Context.APP_OPS_SERVICE);
+        int mode = appOps.checkOpNoThrow(AppOpsManager.OPSTR_GET_USAGE_STATS, android.os.Process.myUid(), getPackageName());
+        return mode == AppOpsManager.MODE_ALLOWED;
     }
+
+    @Override public void onBackPressed() { if (findViewById(R.id.AppDrawer).getVisibility() == View.VISIBLE) changeLayout(true, true); }
 
     @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+
+        // if it does not have USAGE_STATS and it's the first launch, open settings
+        if (!hasUsageStatsPermission() && !prefs.getBoolean("firstLaunch", false)) {
+            Intent usageAccessIntent = new Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS);
+            usageAccessIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            startActivity(usageAccessIntent);
+            SharedPreferences.Editor editor = prefs.edit();
+            editor.putBoolean("firstLaunch", true);
+            editor.apply();
+        }
+
+        queryLauncherProvider(this);
         Window window = getWindow();
         //window.addFlags(FLAG_LAYOUT_NO_LIMITS);
         //window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
@@ -143,10 +199,15 @@ public class MainActivity extends Activity {
         loadApps();
 
         RecyclerView recyclerView = findViewById(R.id.recycler_view);
-        recyclerAdapter adapter = new recyclerAdapter(appList, new recyclerAdapter.RecyclerViewClickListener() {
-            @Override public void onClick(App app) { openAppWithIntent(getPackageManager().getLaunchIntentForPackage(app.packageId), true); }
-            @Override public void onLongClick(App app) {
-                Intent intent = new Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+        adapter = new recyclerAdapter(appList, listActiveProcessPackages(), new recyclerAdapter.RecyclerViewClickListener() {
+            @Override
+            public void onClick(App app) {
+                openAppWithIntent(getPackageManager().getLaunchIntentForPackage(app.packageId), true);
+            }
+
+            @Override
+            public void onLongClick(App app) {
+                Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
                 intent.setData(Uri.parse("package:" + app.packageId));
                 openAppWithIntent(intent, false);
             }
@@ -159,7 +220,8 @@ public class MainActivity extends Activity {
             private boolean onTop = false;
             private boolean onBottom = false;
 
-            @Override public void onScrollStateChanged(@NonNull RecyclerView recyclerView, int newState) {
+            @Override
+            public void onScrollStateChanged(@NonNull RecyclerView recyclerView, int newState) {
                 super.onScrollStateChanged(recyclerView, newState);
                 if (newState == RecyclerView.SCREEN_STATE_ON) {
                     onTop = !recyclerView.canScrollVertically(-1);
@@ -175,14 +237,27 @@ public class MainActivity extends Activity {
                     }
                 }
             }
-            @Override public void onScrolled(@NonNull RecyclerView recyclerView, int dx, int dy) { super.onScrolled(recyclerView, dx, dy); }
+
+            @Override
+            public void onScrolled(@NonNull RecyclerView recyclerView, int dx, int dy) {
+                super.onScrolled(recyclerView, dx, dy);
+            }
         });
 
         search = findViewById(R.id.search);
         search.addTextChangedListener(new TextWatcher() {
-            @Override public void beforeTextChanged(CharSequence charSequence, int i, int i1, int i2) {}
-            @Override public void afterTextChanged(Editable editable) {}
-            @Override public void onTextChanged(CharSequence charSequence, int i, int i1, int i2) { adapter.getFilter().filter(charSequence); }
+            @Override
+            public void beforeTextChanged(CharSequence charSequence, int i, int i1, int i2) {
+            }
+
+            @Override
+            public void afterTextChanged(Editable editable) {
+            }
+
+            @Override
+            public void onTextChanged(CharSequence charSequence, int i, int i1, int i2) {
+                adapter.getFilter().filter(charSequence);
+            }
         });
 
         prefs = PreferenceManager.getDefaultSharedPreferences(this);
@@ -199,36 +274,60 @@ public class MainActivity extends Activity {
             textView.setTag(i);
             textView.setLayoutParams(params);
             textView.setOnLongClickListener(v -> {
-                    loadApps();
-                    AlertDialog.Builder builder = new AlertDialog.Builder(MainActivity.this);
-                    builder.setTitle("Select app");
-                    builder.setItems(alertApps, (dialog, which) -> {
-                        AlertDialog.Builder builder1 = new AlertDialog.Builder(MainActivity.this);
-                        builder1.setTitle("Set app name");
-                        final EditText input = new EditText(MainActivity.this);
-                        input.setText(appNames.get(which));
-                        builder1.setView(input);
-                        input.setTag(appList.get(which).packageId);
-                        builder1.setPositiveButton("Add", (dialog1, which1) -> {
-                            String name = input.getText().toString();
-                            textView.setText(name);
-                            SharedPreferences.Editor editor = prefs.edit();
-                            editor.putString(String.valueOf(textView.getTag()), name);
-                            editor.putString("p" + textView.getTag(), String.valueOf(input.getTag()));
-                            editor.apply();
-                        });
-                        builder1.create();
-                        builder1.show();
+                loadApps();
+                AlertDialog.Builder builder = new AlertDialog.Builder(MainActivity.this);
+                builder.setTitle("Select app");
+                builder.setItems(alertApps, (dialog, which) -> {
+                    AlertDialog.Builder builder1 = new AlertDialog.Builder(MainActivity.this);
+                    builder1.setTitle("Set app name");
+                    final EditText input = new EditText(MainActivity.this);
+                    input.setText(appNames.get(which));
+                    builder1.setView(input);
+                    input.setTag(appList.get(which).packageId);
+                    builder1.setPositiveButton("Add", (dialog1, which1) -> {
+                        String name = input.getText().toString();
+                        textView.setText(name);
+                        SharedPreferences.Editor editor = prefs.edit();
+                        editor.putString(String.valueOf(textView.getTag()), name);
+                        editor.putString("p" + textView.getTag(), String.valueOf(input.getTag()));
+                        editor.apply();
                     });
-                    builder.create();
-                    builder.show();
-                    return true;
+                    builder1.create();
+                    builder1.show();
+                });
+                builder.create();
+                builder.show();
+                return true;
             });
             textView.setOnClickListener(v -> openAppWithIntent(getPackageManager().getLaunchIntentForPackage(prefs.getString("p" + textView.getTag(), "")), true));
             homescreen.addView(textView);
         }
         new SwipeListener(homescreen);
 
+    }
+
+    private void homeUpdateUsage() {
+        LinearLayout homescreen = findViewById(R.id.HomeScreen);
+        Set<String> activeProcessPackages = listActiveProcessPackages();
+
+        for (int i = 0; i < homescreen.getChildCount(); i++) {
+            View view = homescreen.getChildAt(i);
+            if (view instanceof TextView) {
+                TextView textView = (TextView) view;
+                String packageName = prefs.getString("p" + textView.getTag(), "");
+                if (activeProcessPackages.contains(packageName)) {
+                    SpannableString spannableAppName = new SpannableString(textView.getText());
+                    spannableAppName.setSpan(new UnderlineSpan(), 0, spannableAppName.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                    textView.setText(spannableAppName);
+                }
+            }
+        }
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        homeUpdateUsage();
     }
 
     private boolean canMakePhoneCall() {
@@ -331,5 +430,36 @@ public class MainActivity extends Activity {
             view.setOnTouchListener(this);
         }
         @Override public boolean onTouch (View view, MotionEvent motionEvent) { view.performClick(); return gestureDetector.onTouchEvent(motionEvent); }
+    }
+
+    private Set<String> listActiveProcessPackages() {
+        Set<String> activePackages = new HashSet<>();
+        UsageStatsManager mUsageStatsManager = (UsageStatsManager)getSystemService(Context.USAGE_STATS_SERVICE);
+        long endTime = System.currentTimeMillis();
+        long beginTime = endTime - 1000*10; // last 10 minutes
+
+        // We get usage stats for the last day
+        List<UsageStats> stats = mUsageStatsManager.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, beginTime, endTime);
+
+        // Sort the stats by the last time used
+        if(stats != null)
+        {
+            SortedMap<Long,UsageStats> mySortedMap = new TreeMap<Long,UsageStats>();
+            for (UsageStats usageStats : stats)
+            {
+                mySortedMap.put(usageStats.getLastTimeUsed(),usageStats);
+            }
+            if(mySortedMap != null && !mySortedMap.isEmpty())
+            {
+                // topActivity =  mySortedMap.get(mySortedMap.lastKey()).getPackageName();
+                // iterate over mySortedMap
+                for (UsageStats usageStats : mySortedMap.values())
+                {
+                    activePackages.add(usageStats.getPackageName());
+                }
+            }
+        }
+
+        return activePackages;
     }
 }

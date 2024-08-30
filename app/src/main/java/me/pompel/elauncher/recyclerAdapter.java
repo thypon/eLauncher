@@ -1,4 +1,5 @@
 package me.pompel.elauncher;
+
 import android.graphics.Typeface;
 import android.text.SpannableString;
 import android.text.Spanned;
@@ -17,6 +18,7 @@ import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Queue;
+import java.util.Set;
 import java.util.Stack;
 import java.util.stream.Collectors;
 
@@ -24,11 +26,17 @@ public class recyclerAdapter extends RecyclerView.Adapter<recyclerAdapter.AppVie
     private final ArrayList<App> appList;
     private ArrayList<App> appListFiltered;
     private final RecyclerViewClickListener listener;
+    private Set<String> processPackages;
 
-    public recyclerAdapter(ArrayList<App> appList, RecyclerViewClickListener listener) {
+    public recyclerAdapter(ArrayList<App> appList, Set<String> processPackages, RecyclerViewClickListener listener) {
         this.appList = appList;
         this.appListFiltered = appList;
         this.listener = listener;
+        this.processPackages = processPackages;
+    }
+
+    public void setProcessPackages(Set<String> processPackages) {
+        this.processPackages = processPackages;
     }
 
     private static boolean fuzzyContains(String str, String query) {
@@ -98,7 +106,7 @@ public class recyclerAdapter extends RecyclerView.Adapter<recyclerAdapter.AppVie
 
                     // apply the span to the matched characters
                     for (int index : matchedIndexes) {
-                        app.appName.setSpan(new StyleSpan(Typeface.BOLD), index, index + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                        // app.appName.setSpan(new StyleSpan(Typeface.BOLD), index, index + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
                         app.appName.setSpan(new UnderlineSpan(), index, index + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
                     }
                 }
@@ -138,12 +146,17 @@ public class recyclerAdapter extends RecyclerView.Adapter<recyclerAdapter.AppVie
     @Override
     public void onBindViewHolder(@NonNull recyclerAdapter.AppViewHolder holder, int position) {
         SpannableString appName = appListFiltered.get(position).appName;
+        String packageId = appListFiltered.get(position).packageId;
         holder.nameText.setText(appName);
 
         // remove all the spans after the string has been set
         Object[] spans = appName.getSpans(0, appName.length(), Object.class);
         for (Object span : spans) {
             appName.removeSpan(span);
+        }
+
+        if (processPackages != null && processPackages.contains(packageId)) {
+            appName.setSpan(new StyleSpan(Typeface.BOLD), 0, appName.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
         }
     }
 
