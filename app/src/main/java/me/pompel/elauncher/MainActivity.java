@@ -110,7 +110,14 @@ public class MainActivity extends Activity {
         }
     }
 
+    long keyboardActionTime = 0;
+
     private void keyboardAction(boolean hide) {
+        // if this method has been called in the last 100 milliseconds, return
+        long currentTime = System.currentTimeMillis();
+        if (currentTime - 100 < keyboardActionTime) return;
+        keyboardActionTime = currentTime;
+        
         InputMethodManager inputManager = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
         if (hide) {
             search.clearFocus();
