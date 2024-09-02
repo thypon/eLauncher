@@ -1,6 +1,8 @@
 package me.pompel.elauncher;
 
 import androidx.annotation.NonNull;
+import androidx.appcompat.app.AppCompatActivity;
+import androidx.appcompat.app.AppCompatDelegate;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 import android.annotation.SuppressLint;
@@ -15,6 +17,7 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
+import android.content.res.TypedArray;
 import android.database.Cursor;
 import android.graphics.Color;
 import android.graphics.Typeface;
@@ -53,7 +56,7 @@ import java.util.Set;
 import java.util.SortedMap;
 import java.util.TreeMap;
 
-public class MainActivity extends Activity {
+public class MainActivity extends AppCompatActivity {
     private ArrayList<App> appList;
     private ArrayList<SpannableString> appNames;
     private EditText search;
@@ -196,6 +199,20 @@ public class MainActivity extends Activity {
 
     @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        // TODO: implement dark mode logic
+        boolean isDarkMode = false;
+
+        if (isDarkMode) {
+            AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES);
+            setTheme(R.style.AppTheme_InvertedDark);
+        } else {
+            AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO);
+            setTheme(R.style.AppTheme);
+        }
+
+        setContentView(R.layout.activity_main);
+
         setContentView(R.layout.activity_main);
 
         prefs = PreferenceManager.getDefaultSharedPreferences(this);
@@ -214,8 +231,8 @@ public class MainActivity extends Activity {
         Window window = getWindow();
         //window.addFlags(FLAG_LAYOUT_NO_LIMITS);
         //window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
-        window.setStatusBarColor(Color.WHITE);
-        window.setNavigationBarColor(Color.WHITE);
+        window.setStatusBarColor(getColorFromAttr(androidx.appcompat.R.attr.background));
+        window.setNavigationBarColor(getColorFromAttr(androidx.appcompat.R.attr.background));
 
         appList = new ArrayList<>();
         appNames = new ArrayList<>();
@@ -289,7 +306,7 @@ public class MainActivity extends Activity {
         int i = 0;
         for (i = 0; i < prefs.getInt("apps", 8); i++) {
             TextView textView = new TextView(this);
-            textView.setTextColor(Color.BLACK);
+            textView.setTextColor(getColorFromAttr(androidx.appcompat.R.attr.colorPrimary));
             textView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 32);
             textView.setTypeface(Typeface.create(!hasUsageStatsPermission() ? "sans-serif" : "sans-serif-light", Typeface.NORMAL));
             textView.setPadding(0, 0, 0, 50);
@@ -328,7 +345,7 @@ public class MainActivity extends Activity {
 
         if (hasUsageStatsPermission()) {
             TextView textView = new TextView(this);
-            textView.setTextColor(Color.BLACK);
+            textView.setTextColor(getColorFromAttr(androidx.appcompat.R.attr.colorPrimary));
             textView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 32);
             textView.setTypeface(Typeface.create("sans-serif", Typeface.ITALIC));
             textView.setPadding(0, 0, 0, 50);
@@ -595,5 +612,13 @@ public class MainActivity extends Activity {
         }
 
         return "";
+    }
+
+    private int getColorFromAttr(int attr) {
+        TypedValue typedValue = new TypedValue();
+        TypedArray a = obtainStyledAttributes(typedValue.data, new int[]{attr});
+        int color = a.getColor(0, 0);
+        a.recycle();
+        return color;
     }
 }

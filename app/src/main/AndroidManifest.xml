@@ -17,7 +17,7 @@
         android:allowBackup="true"
         android:label="eLauncher"
         android:supportsRtl="true"
-        android:theme="@android:style/Theme.Wallpaper.NoTitleBar"
+        android:theme="@style/AppTheme"
         android:extractNativeLibs="true"
         tools:targetApi="31"
         >

@@ -10,6 +10,6 @@
         android:layout_marginTop="20dp"
         android:fontFamily="sans-serif-light"
         android:textAlignment="center"
-        android:textColor="@android:color/black"
+        android:textColor="?attr/colorPrimary"
         android:textSize="32sp" />
 </FrameLayout>

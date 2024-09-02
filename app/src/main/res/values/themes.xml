@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- res/values/themes.xml -->
+<resources>
+    <!-- Base application theme. -->
+    <style name="AppTheme" parent="Theme.AppCompat.Light.NoActionBar">
+        <!-- Customize your theme here. -->
+        <item name="colorPrimary">@color/colorPrimary</item>
+        <item name="colorPrimaryDark">@color/colorInverted</item>
+        <item name="android:colorBackground">@color/colorInverted</item>
+    </style>
+
+    <!-- Inverted Dark Theme -->
+    <style name="AppTheme.InvertedDark" parent="Theme.AppCompat.NoActionBar">
+        <item name="colorPrimary">@color/colorInverted</item>
+        <item name="colorPrimaryDark">@color/colorPrimary</item>
+        <item name="android:colorBackground">@color/colorPrimary</item>
+        <!-- Add other inverted colors as needed -->
+    </style>
+</resources>
