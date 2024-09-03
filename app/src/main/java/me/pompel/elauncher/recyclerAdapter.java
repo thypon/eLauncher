@@ -1,5 +1,6 @@
 package me.pompel.elauncher;
 
+import android.annotation.SuppressLint;
 import android.graphics.Typeface;
 import android.text.SpannableString;
 import android.text.Spanned;
@@ -49,7 +50,7 @@ public class recyclerAdapter extends RecyclerView.Adapter<recyclerAdapter.AppVie
     }
 
     private static LinkedList<Character> toCharacterList(String str) {
-        return new LinkedList<>(str.chars().mapToObj(e -> (char)e).collect(Collectors.toList()));
+        return str.chars().mapToObj(e -> (char) e).collect(Collectors.toCollection(LinkedList::new));
     }
 
     @Override
@@ -69,6 +70,7 @@ public class recyclerAdapter extends RecyclerView.Adapter<recyclerAdapter.AppVie
                 return results;
             }
 
+            @SuppressLint("NotifyDataSetChanged")
             @Override
             protected void publishResults(CharSequence charSequence, FilterResults filterResults) {
                 appListFiltered = (ArrayList<App>)filterResults.values;
@@ -121,11 +123,11 @@ public class recyclerAdapter extends RecyclerView.Adapter<recyclerAdapter.AppVie
         private final TextView nameText;
 
         @Override
-        public void onClick(View view) { listener.onClick(appListFiltered.get(getAdapterPosition())); }
+        public void onClick(View view) { listener.onClick(appListFiltered.get(getAbsoluteAdapterPosition())); }
 
         @Override
         public boolean onLongClick(View view) {
-            listener.onLongClick(appListFiltered.get(getAdapterPosition()));
+            listener.onLongClick(appListFiltered.get(getAbsoluteAdapterPosition()));
             return true;
         }
 

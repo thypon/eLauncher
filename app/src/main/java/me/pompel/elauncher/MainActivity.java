@@ -3,10 +3,10 @@ package me.pompel.elauncher;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.app.AppCompatDelegate;
+import androidx.preference.PreferenceManager;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 import android.annotation.SuppressLint;
-import android.app.Activity;
 import android.app.AppOpsManager;
 import android.app.AlertDialog;
 import android.app.usage.UsageStats;
@@ -19,20 +19,16 @@ import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.content.res.TypedArray;
 import android.database.Cursor;
-import android.graphics.Color;
 import android.graphics.Typeface;
 import android.net.Uri;
 import android.os.Bundle;
-import android.preference.PreferenceManager;
 import android.provider.MediaStore;
 import android.provider.Settings;
 import android.text.Editable;
-import android.text.InputType;
 import android.text.SpannableString;
 import android.text.Spanned;
 import android.text.TextWatcher;
 import android.text.style.StyleSpan;
-import android.text.style.UnderlineSpan;
 import android.transition.Fade;
 import android.transition.Transition;
 import android.transition.TransitionManager;
@@ -48,7 +44,6 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
@@ -106,7 +101,7 @@ public class MainActivity extends AppCompatActivity {
         Intent intent = new Intent(Intent.ACTION_MAIN, null);
         intent.addCategory(Intent.CATEGORY_LAUNCHER);
         for (ResolveInfo info : packageManager.queryIntentActivities(intent, 0)) appList.add(new App(info.loadLabel(packageManager).toString(), info.activityInfo.packageName));
-        Collections.sort(appList, (app1, app2) -> app1.appName.toString().compareToIgnoreCase(app2.appName.toString()));
+        appList.sort((app1, app2) -> app1.appName.toString().compareToIgnoreCase(app2.appName.toString()));
         for (App app : appList) {
             appNames.add(app.appName);
 
@@ -357,7 +352,7 @@ public class MainActivity extends AppCompatActivity {
             textView.setLayoutParams(params);
             textView.setOnClickListener(v -> {
                 String pkg = lastActiveProcessPackage();
-                if (pkg != null) openAppWithIntent(getPackageManager().getLaunchIntentForPackage(pkg), true);
+                openAppWithIntent(getPackageManager().getLaunchIntentForPackage(pkg), true);
             });
             homescreen.addView(textView);
         }
@@ -420,7 +415,8 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private Intent getDefaultBrowserIntent() {
-        return getPackageManager().getLaunchIntentForPackage(getDefaultBrowserPackage());
+        String pkg = getDefaultBrowserPackage();
+        return pkg != null ? getPackageManager().getLaunchIntentForPackage(pkg) : null;
     }
 
     private List<ResolveInfo> getLaunchersResolveInfos() {
@@ -479,8 +475,9 @@ public class MainActivity extends AppCompatActivity {
 
         SwipeListener(View view) {
             GestureDetector.SimpleOnGestureListener simple = new GestureDetector.SimpleOnGestureListener() {
-                @Override public boolean onDown(MotionEvent e) { return true; }
+                @Override public boolean onDown(@NonNull MotionEvent e) { return true; }
                 @SuppressWarnings("JavaReflectionMemberAccess") @SuppressLint({"WrongConstant"}) @Override public boolean onFling(MotionEvent e1, MotionEvent e2, float velocityX, float velocityY) {
+                    assert e1 != null;
                     float xDiff = e2.getX() - e1.getX();
                     float yDiff = e2.getY() - e1.getY();
                     if (Math.abs(xDiff) > Math.abs(yDiff) && Math.abs(xDiff) > 100 && Math.abs(velocityX) > 100) safeStartActivity((xDiff > 0)
@@ -489,7 +486,7 @@ public class MainActivity extends AppCompatActivity {
                     else if (Math.abs(yDiff) > 100 && Math.abs(velocityY) > 100) {
                         if (yDiff > 0)
                             try { Class.forName("android.app.StatusBarManager").getMethod("expandNotificationsPanel").invoke(getSystemService("statusbar")); }
-                            catch (Exception e) { e.printStackTrace(); }
+                            catch (Exception e) { Log.d(App.class.toString(), SwipeListener.class+": onFling", e); }
                         else {
                             changeLayout(false, true);
                             keyboardAction(false);
@@ -498,12 +495,12 @@ public class MainActivity extends AppCompatActivity {
                     return true;
                 }
 
-                @Override public boolean onDoubleTap(MotionEvent e) {
+                @Override public boolean onDoubleTap(@NonNull MotionEvent e) {
                     openAppWithIntent(getLastLauncherIntent(), true);
                     return true;
                 }
 
-                @Override public void onLongPress(MotionEvent e) {
+                @Override public void onLongPress(@NonNull MotionEvent e) {
                     super.onLongPress(e);
 
                     // start SettingsActivity
@@ -535,7 +532,7 @@ public class MainActivity extends AppCompatActivity {
                 if (usageStats.getLastTimeUsed() < beginTime) continue;
                 mySortedMap.put(usageStats.getLastTimeUsed(), usageStats);
             }
-            if(mySortedMap != null && !mySortedMap.isEmpty())
+            if(!mySortedMap.isEmpty())
             {
                 // topActivity =  mySortedMap.get(mySortedMap.lastKey()).getPackageName();
                 // iterate over mySortedMap
@@ -599,9 +596,10 @@ public class MainActivity extends AppCompatActivity {
                 if (getPackageManager().getLaunchIntentForPackage(usageStats.getPackageName()) == null) continue;
                 mySortedMap.put(usageStats.getLastTimeUsed(),usageStats);
             }
-            if(mySortedMap != null && !mySortedMap.isEmpty())
+            if(!mySortedMap.isEmpty())
             {
-                return mySortedMap.get(mySortedMap.lastKey()).getPackageName();
+                UsageStats last = mySortedMap.get(mySortedMap.lastKey());
+                return last != null ? last.getPackageName() : "";
             }
         }
 
@@ -610,9 +608,10 @@ public class MainActivity extends AppCompatActivity {
 
     private int getColorFromAttr(int attr) {
         TypedValue typedValue = new TypedValue();
-        TypedArray a = obtainStyledAttributes(typedValue.data, new int[]{attr});
-        int color = a.getColor(0, 0);
-        a.recycle();
+        int color;
+        try (TypedArray a = obtainStyledAttributes(typedValue.data, new int[]{attr})) {
+            color = a.getColor(0, 0);
+        }
         return color;
     }
 }
