@@ -44,6 +44,7 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
@@ -577,6 +578,21 @@ public class MainActivity extends AppCompatActivity {
         excludePackages.add(getDefaultPhoneAppPackage());
         excludePackages.add(ELAUNCHER_PACKAGE);
         excludePackages.addAll(getHomescreenPackages());
+        // BigMe specific middlewares
+        excludePackages.addAll(
+                Arrays.asList(
+                        "com.xrz.appmanager",
+                        "com.xrz.standby",
+                        "com.xrz.voice.note",
+                        "com.xrz.ai",
+                        "com.xrz.bookmall",
+                        "com.tencent.weread.eink",
+                        "com.iflytek.speechcloud",
+                        "com.xrz.ebook",
+                        "com.xrz.ebook.launcher",
+                        "com.xrz.hoverballdemo",
+                        "com.xrz.res.service",
+                        "com.xrz.settings"));
 
         UsageStatsManager mUsageStatsManager = (UsageStatsManager)getSystemService(Context.USAGE_STATS_SERVICE);
         long endTime = System.currentTimeMillis();
