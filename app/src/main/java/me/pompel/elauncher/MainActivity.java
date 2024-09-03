@@ -57,6 +57,9 @@ import java.util.SortedMap;
 import java.util.TreeMap;
 
 public class MainActivity extends AppCompatActivity {
+    private static final String NUMBER_OF_APPS = "number_of_apps_preference";
+    private static final String DARK_MODE = "dark_mode_preference";
+
     private ArrayList<App> appList;
     private ArrayList<SpannableString> appNames;
     private EditText search;
@@ -200,8 +203,9 @@ public class MainActivity extends AppCompatActivity {
     @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        // TODO: implement dark mode logic
-        boolean isDarkMode = false;
+        prefs = PreferenceManager.getDefaultSharedPreferences(this);
+
+        boolean isDarkMode = prefs.getBoolean(DARK_MODE, false);
 
         if (isDarkMode) {
             AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES);
@@ -214,8 +218,6 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
 
         setContentView(R.layout.activity_main);
-
-        prefs = PreferenceManager.getDefaultSharedPreferences(this);
 
         // if it does not have USAGE_STATS and it's the first launch, open settings
         if (!hasUsageStatsPermission() && !prefs.getBoolean("firstLaunch", false)) {
@@ -304,7 +306,7 @@ public class MainActivity extends AppCompatActivity {
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
         CharSequence[] alertApps = appNames.toArray(new CharSequence[0]);
         int i = 0;
-        for (i = 0; i < prefs.getInt("apps", 8); i++) {
+        for (i = 0; i < prefs.getInt(NUMBER_OF_APPS, 8); i++) {
             TextView textView = new TextView(this);
             textView.setTextColor(getColorFromAttr(androidx.appcompat.R.attr.colorPrimary));
             textView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 32);
@@ -503,18 +505,10 @@ public class MainActivity extends AppCompatActivity {
 
                 @Override public void onLongPress(MotionEvent e) {
                     super.onLongPress(e);
-                    AlertDialog.Builder builder = new AlertDialog.Builder(MainActivity.this);
-                    builder.setTitle("Number of apps (please manually restart app afterwards)");
-                    final EditText input = new EditText(MainActivity.this);
-                    input.setRawInputType(InputType.TYPE_CLASS_NUMBER);
-                    builder.setView(input);
-                    builder.setPositiveButton("Apply", (dialog1, which1) -> {
-                        SharedPreferences.Editor editor = prefs.edit();
-                        editor.putInt("apps", Integer.parseInt(input.getText().toString()));
-                        editor.apply();
-                    });
-                    builder.create();
-                    builder.show();
+
+                    // start SettingsActivity
+                    Intent intent = new Intent(MainActivity.this, SettingsActivity.class);
+                    startActivity(intent);
                 }
             };
             gestureDetector = new GestureDetector(getApplicationContext(), simple);
@@ -556,7 +550,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private List<String> getHomescreenPackages() {
-        int len = prefs.getInt("apps", 8);
+        int len = prefs.getInt(NUMBER_OF_APPS, 8);
         List<String> homescreenPackages = new LinkedList<>();
 
         for (int i = 0; i < len; i++) {
