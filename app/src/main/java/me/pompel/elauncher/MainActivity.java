@@ -454,7 +454,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     public Intent getLastLauncherIntent() {
-        ResolveInfo[] launcherResolveInfos = (ResolveInfo[]) getLaunchersResolveInfos().toArray();
+        ResolveInfo[] launcherResolveInfos = getLaunchersResolveInfos().toArray(new ResolveInfo[0]);
         ResolveInfo lastLauncher = launcherResolveInfos[launcherResolveInfos.length-1];
 
         if (lastLauncher != null) {
