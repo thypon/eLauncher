@@ -417,7 +417,15 @@ public class MainActivity extends AppCompatActivity {
 
     private Intent getDefaultBrowserIntent() {
         String pkg = getDefaultBrowserPackage();
-        return pkg != null ? getPackageManager().getLaunchIntentForPackage(pkg) : null;
+
+        // if there is no default browser, return default browser selection intent
+        if (pkg == null || pkg.equals("android")) {
+            Intent selector = new Intent(Intent.ACTION_VIEW);
+            selector.setData(Uri.parse("http://"));
+            return selector;
+        }
+
+        return getPackageManager().getLaunchIntentForPackage(pkg);
     }
 
     private List<ResolveInfo> getLaunchersResolveInfos() {
