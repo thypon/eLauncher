@@ -586,6 +586,7 @@ public class MainActivity extends AppCompatActivity {
         excludePackages.add(getDefaultPhoneAppPackage());
         excludePackages.add(ELAUNCHER_PACKAGE);
         excludePackages.addAll(getHomescreenPackages());
+        excludePackages.add("com.android.settings");
         // BigMe specific middlewares
         excludePackages.addAll(
                 Arrays.asList(
