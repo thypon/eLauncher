@@ -63,29 +63,31 @@ public class MainActivity extends AppCompatActivity {
 
     private static final String ELAUNCHER_TAG = "eLauncher";
     private static final String ELAUNCHER_PACKAGE = "me.pompel.elauncher";
-    private static final String BIGME_LAUNCHER_AUTHORITY = "com.xrz.ebook.launcher.provider.LauncherProvider";
-    private static final Uri BIGME_CONTENT_URI = Uri.parse("content://" + BIGME_LAUNCHER_AUTHORITY);
+    private static final String BIGME_LAUNCHER_AUTHORITY = "com.xrz.LauncherProvider";
     private recyclerAdapter adapter;
 
+    /* BIGME shim. Since the default launcher is used to control the gestures, we need to recreate the process,
+     * if it has been killed. We will do that every time we enter this launcher, and everytime we reload, for now.
+     */
     private static void queryLauncherProvider(@NonNull Context context) {
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.Q)
+            return;
+
+        Log.d(ELAUNCHER_TAG, "device brand: " + android.os.Build.BRAND);
+
+        // check if the device vendor is bigme, exit otherwise
+        if (!"alps".equals(android.os.Build.BRAND))
+            return;
+
         ContentResolver contentResolver = context.getContentResolver();
         Cursor cursor = null;
 
         try {
-            Log.d(ELAUNCHER_TAG, "query started");
-            cursor = contentResolver.query(BIGME_CONTENT_URI, null, null, null, null);
-            Log.d(ELAUNCHER_TAG, "no failure yet");
-            if (cursor != null && cursor.moveToFirst()) {
-                do {
-                    // Process each row in the cursor
-                    // Example: Get data from the cursor
-                    String columnName = cursor.getColumnName(0);
-                    String columnValue = cursor.getString(0);
-                    Log.d(ELAUNCHER_TAG, columnName + ": " + columnValue);
-                } while (cursor.moveToNext());
-            }
+            Log.d(ELAUNCHER_TAG, "call started");
+            Bundle ret = contentResolver.call(BIGME_LAUNCHER_AUTHORITY, "custom_key", "true", null);
+            Log.d(ELAUNCHER_TAG, "call succeeded");
         } catch (Exception e) {
-            Log.e(ELAUNCHER_TAG, "Query failed", e);
+            Log.e(ELAUNCHER_TAG, "call failed", e);
         } finally {
             if (cursor != null) {
                 cursor.close();
@@ -395,6 +397,7 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
+        queryLauncherProvider(this);
         homeUpdateUsage();
     }
 
