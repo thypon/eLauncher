@@ -14,6 +14,7 @@ import android.app.usage.UsageStatsManager;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
@@ -61,39 +62,8 @@ public class MainActivity extends AppCompatActivity {
     private EditText search;
     private SharedPreferences prefs;
 
-    private static final String ELAUNCHER_TAG = "eLauncher";
     private static final String ELAUNCHER_PACKAGE = "me.pompel.elauncher";
-    private static final String BIGME_LAUNCHER_AUTHORITY = "com.xrz.LauncherProvider";
     private recyclerAdapter adapter;
-
-    /* BIGME shim. Since the default launcher is used to control the gestures, we need to recreate the process,
-     * if it has been killed. We will do that every time we enter this launcher, and everytime we reload, for now.
-     */
-    private static void queryLauncherProvider(@NonNull Context context) {
-        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.Q)
-            return;
-
-        Log.d(ELAUNCHER_TAG, "device brand: " + android.os.Build.BRAND);
-
-        // check if the device vendor is bigme, exit otherwise
-        if (!"alps".equals(android.os.Build.BRAND))
-            return;
-
-        ContentResolver contentResolver = context.getContentResolver();
-        Cursor cursor = null;
-
-        try {
-            Log.d(ELAUNCHER_TAG, "call started");
-            Bundle ret = contentResolver.call(BIGME_LAUNCHER_AUTHORITY, "custom_key", "true", null);
-            Log.d(ELAUNCHER_TAG, "call succeeded");
-        } catch (Exception e) {
-            Log.e(ELAUNCHER_TAG, "call failed", e);
-        } finally {
-            if (cursor != null) {
-                cursor.close();
-            }
-        }
-    }
 
     private void loadApps() {
         appList.clear();
@@ -201,6 +171,8 @@ public class MainActivity extends AppCompatActivity {
     @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
+        BigmeShims.registerUnlockReceiver(this);
+
         prefs = PreferenceManager.getDefaultSharedPreferences(this);
 
         boolean isDarkMode = prefs.getBoolean(DARK_MODE, false);
@@ -227,7 +199,7 @@ public class MainActivity extends AppCompatActivity {
             editor.apply();
         }
 
-        queryLauncherProvider(this);
+        BigmeShims.queryLauncherProvider(this);
         Window window = getWindow();
         //window.addFlags(FLAG_LAYOUT_NO_LIMITS);
         //window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
@@ -397,7 +369,7 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
-        queryLauncherProvider(this);
+        BigmeShims.queryLauncherProvider(this);
         homeUpdateUsage();
     }
 

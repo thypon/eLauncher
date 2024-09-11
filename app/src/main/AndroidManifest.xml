@@ -43,6 +43,14 @@
                 android:name="android.app.lib_name"
                 android:value="" />
         </activity>
+
+        <receiver android:name=".UnlockReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.HIDE_BAKCLOGO" />
+                <action android:name="android.intent.action.SHOW_BACKLOGO" />
+            </intent-filter>
+        </receiver>
     </application>
 
 </manifest>
