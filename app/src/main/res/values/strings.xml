@@ -4,4 +4,15 @@
     <string name="number_of_apps_title">Number of Apps</string>
     <string name="dark_mode_title">Dark Mode</string>
     <string name="dark_mode_summary">Enable or disable dark mode</string>
+    <string name="gesture_title">Swipe Gestures</string>
+    <string name="gesture_hint">Tap to pick app • \"Reset to Default\" in picker</string>
+    <string name="gesture_left_default">Default</string>
+    <string name="gesture_right_default">Default</string>
+    <string name="gesture_reset_left">Left gesture reset to default</string>
+    <string name="gesture_reset_right">Right gesture reset to default</string>
+    <string name="app_picker_title">Select App</string>
+    <string name="gesture_picker_left_title">Left Gesture App</string>
+    <string name="gesture_picker_right_title">Right Gesture App</string>
+    <string name="gesture_picker_reset">Reset to Default</string>
+    <string name="gesture_picker_cancel">Cancel</string>
 </resources>

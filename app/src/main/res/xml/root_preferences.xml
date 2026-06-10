@@ -1,5 +1,9 @@
 <PreferenceScreen xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:android="http://schemas.android.com/apk/res/android">
+    <me.pompel.elauncher.GesturePreference
+        app:key="gesture_preference"
+        app:title="@string/gesture_title"
+        app:summary="@string/gesture_hint" />
     <SeekBarPreference
         app:key="number_of_apps_preference"
         app:title="@string/number_of_apps_title"

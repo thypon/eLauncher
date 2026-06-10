@@ -224,11 +224,11 @@ public class MainActivity extends AppCompatActivity {
         if (isBackGesture) {
             // Block back gestures - do nothing
         } else if (isLeftEdge) {
-            // Left edge swipe - open phone dialer or camera (same as right swipe in SwipeListener)
-            safeStartActivity(new Intent(canMakePhoneCall() ? Intent.ACTION_DIAL : MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA));
+            launchGesturePackageOrDefault("left_gesture_package",
+                getDefaultLeftGestureIntent());
         } else if (isRightEdge) {
-            // Right edge swipe - open default browser (same as left swipe in SwipeListener)
-            safeStartActivity(getDefaultBrowserIntent());
+            launchGesturePackageOrDefault("right_gesture_package",
+                getDefaultBrowserIntent());
         }
         // Reset flags
         isBackGesture = false;
@@ -255,8 +255,6 @@ public class MainActivity extends AppCompatActivity {
             AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO);
             setTheme(R.style.AppTheme);
         }
-
-        setContentView(R.layout.activity_main);
 
         setContentView(R.layout.activity_main);
 
@@ -345,6 +343,7 @@ public class MainActivity extends AppCompatActivity {
 
         LinearLayout homescreen = findViewById(R.id.HomeScreen);
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+
         CharSequence[] alertApps = appNames.toArray(new CharSequence[0]);
         int i = 0;
         for (i = 0; i < prefs.getInt(NUMBER_OF_APPS, 8); i++) {
@@ -474,6 +473,10 @@ public class MainActivity extends AppCompatActivity {
         return getPackageManager().getLaunchIntentForPackage(pkg);
     }
 
+    private Intent getDefaultLeftGestureIntent() {
+        return new Intent(canMakePhoneCall() ? Intent.ACTION_DIAL : MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA);
+    }
+
     private List<ResolveInfo> getLaunchersResolveInfos() {
         List<ResolveInfo> launchers = new LinkedList<ResolveInfo>();
         PackageManager packageManager = getPackageManager();
@@ -525,6 +528,21 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    private void launchGesturePackageOrDefault(String prefKey, Intent defaultIntent) {
+        String pkg = prefs.getString(prefKey, "");
+        if (pkg.isEmpty()) {
+            safeStartActivity(defaultIntent);
+            return;
+        }
+        Intent intent = getPackageManager().getLaunchIntentForPackage(pkg);
+        if (intent != null) {
+            safeStartActivity(intent);
+        } else {
+            prefs.edit().remove(prefKey).apply();
+            safeStartActivity(defaultIntent);
+        }
+    }
+
     private class SwipeListener implements View.OnTouchListener {
         private final GestureDetector gestureDetector;
 
@@ -535,9 +553,15 @@ public class MainActivity extends AppCompatActivity {
                     assert e1 != null;
                     float xDiff = e2.getX() - e1.getX();
                     float yDiff = e2.getY() - e1.getY();
-                    if (Math.abs(xDiff) > Math.abs(yDiff) && Math.abs(xDiff) > 100 && Math.abs(velocityX) > 100) safeStartActivity((xDiff > 0)
-                            ? new Intent(canMakePhoneCall() ? Intent.ACTION_DIAL : MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA)
-                            : getDefaultBrowserIntent());
+                    if (Math.abs(xDiff) > Math.abs(yDiff) && Math.abs(xDiff) > 100 && Math.abs(velocityX) > 100) {
+                        if (xDiff > 0) {
+                            launchGesturePackageOrDefault("right_gesture_package",
+                                getDefaultBrowserIntent());
+                        } else {
+                            launchGesturePackageOrDefault("left_gesture_package",
+                                getDefaultLeftGestureIntent());
+                        }
+                    }
                     else if (Math.abs(yDiff) > 100 && Math.abs(velocityY) > 100) {
                         if (yDiff > 0)
                             try { Class.forName("android.app.StatusBarManager").getMethod("expandNotificationsPanel").invoke(getSystemService("statusbar")); }

@@ -7,6 +7,7 @@
     android:layout_height="match_parent"
     android:animateLayoutChanges="false"
     android:background="?attr/android:colorBackground"
+    android:fitsSystemWindows="true"
     tools:context=".MainActivity">
 
     <LinearLayout

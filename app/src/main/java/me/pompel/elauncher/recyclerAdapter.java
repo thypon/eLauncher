@@ -21,7 +21,7 @@ import java.util.List;
 import java.util.Queue;
 import java.util.Set;
 import java.util.Stack;
-import java.util.stream.Collectors;
+
 
 public class recyclerAdapter extends RecyclerView.Adapter<recyclerAdapter.AppViewHolder> implements Filterable {
     private final ArrayList<App> appList;
@@ -50,7 +50,11 @@ public class recyclerAdapter extends RecyclerView.Adapter<recyclerAdapter.AppVie
     }
 
     private static LinkedList<Character> toCharacterList(String str) {
-        return str.chars().mapToObj(e -> (char) e).collect(Collectors.toCollection(LinkedList::new));
+        LinkedList<Character> list = new LinkedList<>();
+        for (char c : str.toCharArray()) {
+            list.add(c);
+        }
+        return list;
     }
 
     @Override

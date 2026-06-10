@@ -7,6 +7,7 @@
         <item name="colorPrimary">@color/colorPrimary</item>
         <item name="colorPrimaryDark">@color/colorInverted</item>
         <item name="android:colorBackground">@color/colorInverted</item>
+        <item name="android:windowTranslucentStatus">true</item>
     </style>
 
     <!-- Inverted Dark Theme -->
@@ -14,6 +15,6 @@
         <item name="colorPrimary">@color/colorInverted</item>
         <item name="colorPrimaryDark">@color/colorPrimary</item>
         <item name="android:colorBackground">@color/colorPrimary</item>
-        <!-- Add other inverted colors as needed -->
+        <item name="android:windowTranslucentStatus">true</item>
     </style>
 </resources>
