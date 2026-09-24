@@ -88,21 +88,83 @@ public class LauncherWorld {
             android.content.pm.ActivityInfo added = shadowOf(pm).addActivityIfNotPresent(cn);
             added.applicationInfo = pi.applicationInfo;
             added.nonLocalizedLabel = label;
-            try {
-                java.lang.reflect.Field f = org.robolectric.shadows.ShadowPackageManager.class
-                        .getDeclaredField("activityFilters");
-                f.setAccessible(true);
-                @SuppressWarnings("unchecked")
-                java.util.SortedMap<android.content.ComponentName, java.util.List<android.content.IntentFilter>> filters =
-                        (java.util.SortedMap<android.content.ComponentName, java.util.List<android.content.IntentFilter>>) f.get(null);
-                android.content.IntentFilter filter = new android.content.IntentFilter(Intent.ACTION_MAIN);
-                filter.addCategory(Intent.CATEGORY_LAUNCHER);
-                filter.addCategory(Intent.CATEGORY_DEFAULT);
-                filters.put(cn, new java.util.ArrayList<>(java.util.Collections.singletonList(filter)));
-            } catch (ReflectiveOperationException e) {
-                throw new RuntimeException(e);
-            }
+            android.content.IntentFilter filter = new android.content.IntentFilter(Intent.ACTION_MAIN);
+            filter.addCategory(Intent.CATEGORY_LAUNCHER);
+            filter.addCategory(Intent.CATEGORY_DEFAULT);
+            addActivityFilter(cn, filter);
         }
+    }
+
+    public static String pkgFor(String label) {
+        return "com.fixtures." + label.toLowerCase();
+    }
+
+    /** Appends (never replaces) an intent filter for a component in the shadow package
+     * manager's static filter map, so extra capabilities (HOME, VIEW http, ...) can be
+     * layered onto apps installed via installApps without breaking their launch filter. */
+    private void addActivityFilter(android.content.ComponentName cn, android.content.IntentFilter filter) {
+        try {
+            java.lang.reflect.Field f = org.robolectric.shadows.ShadowPackageManager.class
+                    .getDeclaredField("activityFilters");
+            f.setAccessible(true);
+            @SuppressWarnings("unchecked")
+            java.util.SortedMap<android.content.ComponentName, java.util.List<android.content.IntentFilter>> filters =
+                    (java.util.SortedMap<android.content.ComponentName, java.util.List<android.content.IntentFilter>>) f.get(null);
+            java.util.List<android.content.IntentFilter> existing = filters.get(cn);
+            if (existing == null) {
+                filters.put(cn, new java.util.ArrayList<>(java.util.Collections.singletonList(filter)));
+            } else {
+                existing.add(filter);
+            }
+        } catch (ReflectiveOperationException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    /** Registers a ResolveInfo for ACTION_CALL with a tel: URI so that
+     * MainActivity.canMakePhoneCall() resolves (Robolectric has no phone app by default). */
+    public void installPhoneApp(String label) {
+        String pkg = pkgFor(label);
+        android.content.pm.ResolveInfo ri = new android.content.pm.ResolveInfo();
+        ri.activityInfo = new android.content.pm.ActivityInfo();
+        ri.activityInfo.packageName = pkg;
+        ri.activityInfo.name = pkg + ".MainActivity";
+        ri.activityInfo.applicationInfo = new android.content.pm.ApplicationInfo();
+        ri.activityInfo.applicationInfo.packageName = pkg;
+        ri.nonLocalizedLabel = label;
+        shadowOf(appContext().getPackageManager()).addResolveInfoForIntent(
+                new Intent(Intent.ACTION_CALL, android.net.Uri.parse("tel:1234567890")), ri);
+    }
+
+    /** Installs a launchable app that additionally resolves ACTION_VIEW http: as the
+     * system default browser (CATEGORY_DEFAULT is required by MATCH_DEFAULT_ONLY). */
+    public void installBrowserApp(String label) {
+        installApps(label);
+        android.content.IntentFilter filter = new android.content.IntentFilter(Intent.ACTION_VIEW);
+        filter.addCategory(Intent.CATEGORY_DEFAULT);
+        filter.addDataScheme("http");
+        addActivityFilter(new android.content.ComponentName(pkgFor(label), pkgFor(label) + ".MainActivity"), filter);
+    }
+
+    /** Installs a second HOME launcher (needed for double-tap "last launcher" behavior;
+     * MainActivity crashes with an empty launcher query, so scenarios must install one). */
+    public void installOtherLauncher(String label) {
+        installApps(label);
+        android.content.IntentFilter filter = new android.content.IntentFilter(Intent.ACTION_MAIN);
+        filter.addCategory(Intent.CATEGORY_LAUNCHER);
+        filter.addCategory(Intent.CATEGORY_HOME);
+        filter.addCategory(Intent.CATEGORY_DEFAULT);
+        addActivityFilter(new android.content.ComponentName(pkgFor(label), pkgFor(label) + ".MainActivity"), filter);
+    }
+
+    public void setGesturePackage(String side, String pkg) {
+        android.preference.PreferenceManager.getDefaultSharedPreferences(appContext()).edit()
+                .putString(side + "_gesture_package", pkg).commit();
+    }
+
+    public String gesturePackage(String side) {
+        return android.preference.PreferenceManager.getDefaultSharedPreferences(appContext())
+                .getString(side + "_gesture_package", null);
     }
 
     /** Seeds prefs so tests start clean: onboarding done + 2 homescreen slots (leaves
@@ -110,11 +172,29 @@ public class LauncherWorld {
      * Also denies USAGE_STATS: Robolectric's AppOpsManager defaults to MODE_ALLOWED, but the real
      * device starts without the grant. Scenarios needing usage data re-grant explicitly. */
     public void seedOnboardingDone() {
+        resetPackageManagerResolvers();
         denyUsageStats();
         android.preference.PreferenceManager.getDefaultSharedPreferences(appContext()).edit()
                 .putBoolean("firstLaunch", true)
                 .putInt("number_of_apps_preference", 2)
                 .commit();
+    }
+
+    /** ShadowPackageManager.resolveInfoForIntent is a STATIC map (leaks across scenarios):
+     * a phone app registered by one scenario would make later scenarios resolve ACTION_CALL.
+     * Clear it so every scenario starts from the same package-manager resolver state. */
+    public void resetPackageManagerResolvers() {
+        try {
+            java.lang.reflect.Field f = org.robolectric.shadows.ShadowPackageManager.class
+                    .getDeclaredField("resolveInfoForIntent");
+            f.setAccessible(true);
+            @SuppressWarnings("unchecked")
+            java.util.Map<Intent, java.util.List<android.content.pm.ResolveInfo>> resolvers =
+                    (java.util.Map<Intent, java.util.List<android.content.pm.ResolveInfo>>) f.get(null);
+            resolvers.clear();
+        } catch (ReflectiveOperationException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     /** Robolectric's ShadowAppOpsManager allows every op by default; make the grant explicit. */
@@ -185,6 +265,119 @@ public class LauncherWorld {
         scenario.onActivity(a -> open[0] = a.findViewById(R.id.AppDrawer).getVisibility() == View.VISIBLE
                 && a.findViewById(R.id.HomeScreen).getVisibility() == View.GONE);
         return open[0];
+    }
+
+    // ---- synthetic gesture dispatch -------------------------------------------------------
+
+    private void dispatch(android.view.MotionEvent event, MainActivity a) {
+        a.dispatchTouchEvent(event);
+        event.recycle();
+    }
+
+    /** Dispatches a touch stream through the activity: DOWN at (x0,y0), `steps` MOVE events
+     * of (dx,dy) each `stepMs` milliseconds apart, then UP. Velocity ≈ dx/stepMs px per ms. */
+    private void runTouchStream(MainActivity a, int x0, int y0, int dx, int dy, int steps, long stepMs) {
+        long base = android.os.SystemClock.uptimeMillis();
+        dispatch(android.view.MotionEvent.obtain(base, base,
+                android.view.MotionEvent.ACTION_DOWN, x0, y0, 0), a);
+        for (int i = 1; i <= steps; i++) {
+            long t = base + i * stepMs;
+            dispatch(android.view.MotionEvent.obtain(base, t,
+                    android.view.MotionEvent.ACTION_MOVE, x0 + i * dx, y0 + i * dy, 0), a);
+        }
+        dispatch(android.view.MotionEvent.obtain(base, base + (steps + 1) * stepMs,
+                android.view.MotionEvent.ACTION_UP, x0 + steps * dx, y0 + steps * dy, 0), a);
+    }
+
+    /** Horizontal/vertical fling on the home screen (below the slots). Fling velocity is
+     * ~60px per 16ms — well past MainActivity's 100px/100 velocity thresholds. */
+    public void fling(String direction) {
+        scenario.onActivity(a -> {
+            int w = a.getResources().getDisplayMetrics().widthPixels;
+            int h = a.getResources().getDisplayMetrics().heightPixels;
+            int x0 = w / 2, y0 = h - 20, dx = 0, dy = 0;
+            if ("left".equals(direction)) dx = -60;
+            else if ("right".equals(direction)) dx = 60;
+            else if ("up".equals(direction)) dy = -60;
+            else if ("down".equals(direction)) { y0 = h / 2; dy = 60; }
+            else throw new IllegalArgumentException("unknown direction: " + direction);
+            runTouchStream(a, x0, y0, dx, dy, 8, 16L);
+        });
+        idle();
+    }
+
+    /** Quick tap within the 50dp edge zone (no movement, no long-press delay). */
+    public void edgeTap(String side) {
+        scenario.onActivity(a -> {
+            int w = a.getResources().getDisplayMetrics().widthPixels;
+            int h = a.getResources().getDisplayMetrics().heightPixels;
+            int x = "left".equals(side) ? 10 : w - 10;
+            int y = h - 20;
+            long base = android.os.SystemClock.uptimeMillis();
+            dispatch(android.view.MotionEvent.obtain(base, base,
+                    android.view.MotionEvent.ACTION_DOWN, x, y, 0), a);
+            dispatch(android.view.MotionEvent.obtain(base, base + 50,
+                    android.view.MotionEvent.ACTION_UP, x, y, 0), a);
+        });
+        idle();
+    }
+
+    /** Slow inward horizontal swipe from a screen edge (30px per 400ms ≈ 75px/s — under the
+     * fling velocity threshold) so only the back-gesture state machine marks the touch. */
+    public void edgeSwipe(String side) {
+        scenario.onActivity(a -> {
+            int w = a.getResources().getDisplayMetrics().widthPixels;
+            int h = a.getResources().getDisplayMetrics().heightPixels;
+            int x = "left".equals(side) ? 10 : w - 10;
+            int dx = "left".equals(side) ? 30 : -30;
+            runTouchStream(a, x, h - 20, dx, 0, 8, 400L);
+        });
+        idle();
+    }
+
+    /** Two taps ~120ms apart; the second DOWN triggers GestureDetector.onDoubleTap. */
+    public void doubleTapHome() {
+        scenario.onActivity(a -> {
+            int w = a.getResources().getDisplayMetrics().widthPixels;
+            int h = a.getResources().getDisplayMetrics().heightPixels;
+            int x = w / 2, y = h - 20;
+            long base = android.os.SystemClock.uptimeMillis();
+            dispatch(android.view.MotionEvent.obtain(base, base,
+                    android.view.MotionEvent.ACTION_DOWN, x, y, 0), a);
+            dispatch(android.view.MotionEvent.obtain(base, base + 60,
+                    android.view.MotionEvent.ACTION_UP, x, y, 0), a);
+            dispatch(android.view.MotionEvent.obtain(base, base + 120,
+                    android.view.MotionEvent.ACTION_DOWN, x, y, 0), a);
+            dispatch(android.view.MotionEvent.obtain(base, base + 200,
+                    android.view.MotionEvent.ACTION_UP, x, y, 0), a);
+        });
+        idle();
+    }
+
+    /** Long press (DOWN, let the 500ms GestureDetector timer fire on the looper, UP). */
+    public void longPressHome() {
+        scenario.onActivity(a -> {
+            int w = a.getResources().getDisplayMetrics().widthPixels;
+            int h = a.getResources().getDisplayMetrics().heightPixels;
+            long base = android.os.SystemClock.uptimeMillis();
+            dispatch(android.view.MotionEvent.obtain(base, base,
+                    android.view.MotionEvent.ACTION_DOWN, w / 2, h - 20, 0), a);
+        });
+        org.robolectric.Shadows.shadowOf(Looper.getMainLooper()).idleFor(700, TimeUnit.MILLISECONDS);
+        scenario.onActivity(a -> {
+            int w = a.getResources().getDisplayMetrics().widthPixels;
+            int h = a.getResources().getDisplayMetrics().heightPixels;
+            long base = android.os.SystemClock.uptimeMillis();
+            dispatch(android.view.MotionEvent.obtain(base, base + 700,
+                    android.view.MotionEvent.ACTION_UP, w / 2, h - 20, 0), a);
+        });
+        idle();
+    }
+
+    /** Drives MainActivity.onBackPressed() directly (edge gesture flags are its input). */
+    public void pressBack() {
+        scenario.onActivity(a -> a.onBackPressed());
+        idle();
     }
 
     public boolean homeVisible() {
