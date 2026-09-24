@@ -106,12 +106,30 @@ public class LauncherWorld {
     }
 
     /** Seeds prefs so tests start clean: onboarding done + 2 homescreen slots (leaves
-     * free space at the bottom of the home screen for swipe gestures on small Robolectric displays). */
+     * free space at the bottom of the home screen for swipe gestures on small Robolectric displays).
+     * Also denies USAGE_STATS: Robolectric's AppOpsManager defaults to MODE_ALLOWED, but the real
+     * device starts without the grant. Scenarios needing usage data re-grant explicitly. */
     public void seedOnboardingDone() {
+        denyUsageStats();
         android.preference.PreferenceManager.getDefaultSharedPreferences(appContext()).edit()
                 .putBoolean("firstLaunch", true)
                 .putInt("number_of_apps_preference", 2)
                 .commit();
+    }
+
+    /** Robolectric's ShadowAppOpsManager allows every op by default; make the grant explicit. */
+    public void denyUsageStats() {
+        setUsageStatsMode(android.app.AppOpsManager.MODE_ERRORED);
+    }
+
+    public void allowUsageStats() {
+        setUsageStatsMode(android.app.AppOpsManager.MODE_ALLOWED);
+    }
+
+    private void setUsageStatsMode(int mode) {
+        shadowOf((android.app.AppOpsManager) appContext().getSystemService(android.content.Context.APP_OPS_SERVICE))
+                .setMode(android.app.AppOpsManager.OPSTR_GET_USAGE_STATS,
+                        android.os.Process.myUid(), appContext().getPackageName(), mode);
     }
 
     public void startLauncher() {
@@ -231,6 +249,121 @@ public class LauncherWorld {
         if (pos < 0) throw new AssertionError("No drawer row for label: " + label);
         onView(withId(R.id.recycler_view)).perform(
                 androidx.test.espresso.contrib.RecyclerViewActions.actionOnItemAtPosition(pos, longClick()));
+    }
+
+    /** Home screen slot helpers. Without USAGE_STATS permission the HomeScreen holds exactly
+     * one TextView per configured slot (the "last app" row is only added with permission). */
+
+    /** Seeds the number_of_apps_preference (must be called before startLauncher()). */
+    public void configureSlots(int count) {
+        android.preference.PreferenceManager.getDefaultSharedPreferences(appContext()).edit()
+                .putInt("number_of_apps_preference", count)
+                .commit();
+    }
+
+    /** Seeds slot assignment prefs ("i" -> label, "p<i>" -> package) before startLauncher(). */
+    public void assignSlot(int slot, String label) {
+        android.preference.PreferenceManager.getDefaultSharedPreferences(appContext()).edit()
+                .putString(String.valueOf(slot), label)
+                .putString("p" + slot, "com.fixtures." + label.toLowerCase())
+                .commit();
+    }
+
+    public int slotCount() {
+        int[] n = new int[1];
+        scenario.onActivity(a -> n[0] = ((android.widget.LinearLayout) a.findViewById(R.id.HomeScreen)).getChildCount());
+        return n[0];
+    }
+
+    public String slotText(int slot) {
+        String[] text = new String[1];
+        scenario.onActivity(a -> {
+            android.widget.LinearLayout home = (android.widget.LinearLayout) a.findViewById(R.id.HomeScreen);
+            text[0] = ((TextView) home.getChildAt(slot)).getText().toString();
+        });
+        return text[0];
+    }
+
+    public void clickSlot(int slot) {
+        scenario.onActivity(a -> {
+            android.widget.LinearLayout home = (android.widget.LinearLayout) a.findViewById(R.id.HomeScreen);
+            home.getChildAt(slot).performClick();
+        });
+        idle();
+    }
+
+    public void longPressSlot(int slot) {
+        scenario.onActivity(a -> {
+            android.widget.LinearLayout home = (android.widget.LinearLayout) a.findViewById(R.id.HomeScreen);
+            home.getChildAt(slot).performLongClick();
+        });
+        idle();
+    }
+
+    public String storedSlotLabel(int slot) {
+        return android.preference.PreferenceManager.getDefaultSharedPreferences(appContext())
+                .getString(String.valueOf(slot), null);
+    }
+
+    public String storedSlotPackage(int slot) {
+        return android.preference.PreferenceManager.getDefaultSharedPreferences(appContext())
+                .getString("p" + slot, null);
+    }
+
+    /** Clicks the item with the given text in the latest shown dialog's list. */
+    public void pickAppInDialog(String label) {
+        android.widget.ListView list = findInDialog(android.widget.ListView.class);
+        int index = -1;
+        for (int i = 0; i < list.getCount(); i++) {
+            Object item = list.getItemAtPosition(i);
+            if (item != null && label.contentEquals(item.toString())) { index = i; break; }
+        }
+        if (index < 0) throw new AssertionError("No item " + label + " in dialog list");
+        list.performItemClick(list.getChildAt(index), index, list.getItemIdAtPosition(index));
+        idle();
+    }
+
+    /** Sets the text of the EditText inside the latest dialog (the rename input). */
+    public void setDialogInput(String text) {
+        android.widget.EditText input = findInDialog(android.widget.EditText.class);
+        if (input == null) throw new AssertionError("No EditText in dialog");
+        input.setText(text);
+        idle();
+    }
+
+    /** Clicks the button with the given text ("Add", "Cancel", ...) in the latest dialog. */
+    public void confirmDialog(String buttonText) {
+        android.widget.Button button = findInDialog(android.widget.Button.class, buttonText);
+        if (button == null) throw new AssertionError("No button " + buttonText + " in dialog");
+        button.performClick();
+        idle();
+    }
+
+    private android.view.View findInDialog(java.util.function.Predicate<android.view.View> test) {
+        android.app.Dialog latest = org.robolectric.shadows.ShadowDialog.getLatestDialog();
+        if (latest == null) throw new AssertionError("No dialog shown");
+        final android.view.View[] found = new android.view.View[1];
+        collect(latest.getWindow().getDecorView(), test, found);
+        return found[0];
+    }
+
+    private <T extends android.view.View> T findInDialog(Class<T> type) {
+        return (T) findInDialog(v -> type.isInstance(v));
+    }
+
+    private android.widget.Button findInDialog(Class<android.widget.Button> type, String text) {
+        return (android.widget.Button) findInDialog(v -> type.isInstance(v) && text.equals(((TextView) v).getText().toString()));
+    }
+
+    private void collect(android.view.View view, java.util.function.Predicate<android.view.View> test, android.view.View[] out) {
+        if (out[0] != null) return;
+        if (test.test(view)) { out[0] = view; return; }
+        if (view instanceof android.view.ViewGroup) {
+            android.view.ViewGroup group = (android.view.ViewGroup) view;
+            for (int i = 0; i < group.getChildCount() && out[0] == null; i++) {
+                collect(group.getChildAt(i), test, out);
+            }
+        }
     }
 
     public Intent nextStartedActivity() {
