@@ -29,3 +29,17 @@ You can download the apk file directly from the releases tab and install it manu
 ## Contributing
 
 Feel free to contribute if you found a bug or have a way to make the code more efficient or minimal, but please don't add massive new features. If you feel like adding a lot of customization options, widgets, etc. please start your own fork, as the scope of this project is to be as (reasonably) barebones of a launcher as possible.
+
+## Testing (Cucumber BDD + coverage gate)
+
+Behavior specs live in Gherkin features (`app/src/test/resources/features/`) and run on the JVM via Robolectric — no emulator needed:
+
+```sh
+./gradlew check                      # runs the BDD suite, unit tests, and the coverage gate
+./gradlew jacocoUnitTestReport       # HTML/XML coverage report
+```
+
+- Feature files describe every launcher behavior (drawer, fuzzy search, homescreen slots, gestures, settings, first-launch onboarding, dark mode, last-used-app, vendor shims).
+- Step definitions are in `app/src/test/java/me/pompel/elauncher/bdd/steps/`.
+- `check` fails the build when line coverage of the app source drops below **80%** (`jacocoTestCoverageVerification`).
+- CI (`.github/workflows/ci.yml`) enforces the gate on every push and pull request.
