@@ -182,6 +182,12 @@ public class LauncherWorld {
                 .getString(side + "_gesture_package", null);
     }
 
+    /** Explicit boolean pref write (committed synchronously). */
+    public void setBooleanPref(String key, boolean value) {
+        android.preference.PreferenceManager.getDefaultSharedPreferences(appContext()).edit()
+                .putBoolean(key, value).commit();
+    }
+
     /** Seeds prefs so tests start clean: onboarding done + 2 homescreen slots (leaves
      * free space at the bottom of the home screen for swipe gestures on small Robolectric displays).
      * Also denies USAGE_STATS: Robolectric's AppOpsManager defaults to MODE_ALLOWED, but the real
@@ -191,6 +197,16 @@ public class LauncherWorld {
         denyUsageStats();
         android.preference.PreferenceManager.getDefaultSharedPreferences(appContext()).edit()
                 .putBoolean("firstLaunch", true)
+                .putInt("number_of_apps_preference", 2)
+                .commit();
+    }
+
+    /** Same as seedOnboardingDone() but WITHOUT marking onboarding done: MainActivity
+     * must treat the next start as the first launch. */
+    public void seedNoOnboarding() {
+        resetPackageManagerResolvers();
+        denyUsageStats();
+        android.preference.PreferenceManager.getDefaultSharedPreferences(appContext()).edit()
                 .putInt("number_of_apps_preference", 2)
                 .commit();
     }
@@ -612,6 +628,17 @@ public class LauncherWorld {
         });
         return text[0];
     }
+
+    /** Text color of homescreen slot 0: white on the dark theme, black on light. */
+    public int slotTextColor() {
+        int[] color = new int[1];
+        scenario.onActivity(a -> {
+            android.widget.LinearLayout home = (android.widget.LinearLayout) a.findViewById(R.id.HomeScreen);
+            color[0] = ((TextView) home.getChildAt(0)).getTextColors().getDefaultColor();
+        });
+        return color[0];
+    }
+
 
     public void clickSlot(int slot) {
         scenario.onActivity(a -> {
