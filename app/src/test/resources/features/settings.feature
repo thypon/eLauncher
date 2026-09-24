@@ -70,3 +70,8 @@ Feature: Settings screen
     Given the settings screen is open
     When I press back on the settings screen
     Then the launcher is restarted
+
+  Scenario: A stale right gesture assignment shows the right default
+    Given the right gesture is assigned to a missing app
+    And the settings screen is open
+    Then the right gesture button shows "Default"

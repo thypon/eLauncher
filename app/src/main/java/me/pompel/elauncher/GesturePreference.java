@@ -43,19 +43,19 @@ public class GesturePreference extends Preference {
         SharedPreferences prefs = getSharedPreferences();
         String leftPkg = prefs.getString(KEY_LEFT_GESTURE, "");
         String rightPkg = prefs.getString(KEY_RIGHT_GESTURE, "");
-        leftButton.setText(getAppName(leftPkg));
-        rightButton.setText(getAppName(rightPkg));
+        leftButton.setText(getAppName(leftPkg, R.string.gesture_left_default));
+        rightButton.setText(getAppName(rightPkg, R.string.gesture_right_default));
     }
 
-    private String getAppName(String packageName) {
+    private String getAppName(String packageName, int defaultRes) {
         if (packageName == null || packageName.isEmpty()) {
-            return getContext().getString(R.string.gesture_left_default);
+            return getContext().getString(defaultRes);
         }
         try {
             PackageManager pm = getContext().getPackageManager();
             return pm.getApplicationLabel(pm.getApplicationInfo(packageName, 0)).toString();
         } catch (PackageManager.NameNotFoundException e) {
-            return getContext().getString(R.string.gesture_left_default);
+            return getContext().getString(defaultRes);
         }
     }
 
