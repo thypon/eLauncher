@@ -1,0 +1,28 @@
+name: puLL-Merge
+on:
+  pull_request:
+    types: ['opened', 'edited', 'reopened', 'synchronize', 'ready_for_review']
+  merge_group:
+permissions:
+  contents: read
+  pull-requests: write
+jobs:
+  pull-merge:
+    concurrency:
+      group: ${{ github.head_ref }}-init
+      cancel-in-progress: true
+    name: puLL-Merge
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+    env:
+      # openai@4.104.0 (locked in pull-merge) honors OPENAI_BASE_URL:
+      # constructor falls back to the env var, empty/unset falls back to
+      # api.openai.com. Verified against a local endpoint on pristine
+      # pull-merge main (no action-side support needed).
+      OPENAI_BASE_URL: ${{ secrets.OPENAI_BASE_URL }}
+    steps:
+      - uses: brave/pull-merge@main
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          openai_api_key: ${{ secrets.OPENAI_API_KEY }}

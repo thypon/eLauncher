@@ -119,6 +119,8 @@ tasks.register('jacocoTestCoverageVerification', JacocoCoverageVerification) {
 
 tasks.named('check').configure {
     dependsOn tasks.named('jacocoTestCoverageVerification')
+    // CI consumes the XML (Cobertura upload for the GitHub coverage ruleset).
+    dependsOn tasks.named('jacocoUnitTestReport')
 }
 
 android {
