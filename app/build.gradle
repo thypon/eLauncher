@@ -1,5 +1,6 @@
 plugins {
     id 'com.android.application'
+    id 'jacoco'
 }
 
 android {
@@ -29,6 +30,70 @@ android {
         sourceCompatibility JavaVersion.VERSION_1_8
         targetCompatibility JavaVersion.VERSION_1_8
     }
+
+    testOptions {
+        unitTests {
+            includeAndroidResources = true
+        }
+    }
+}
+
+// JaCoCo OFFLINE instrumentation for the JVM unit-test suite.
+// Robolectric's SandboxClassLoader bypasses the JaCoCo javaagent, so agent-based
+// coverage records 0% (robolectric#2230/#5575). Pre-instrumenting app classes
+// fixes it. Gate (min 80% verification) is enforced in a later iteration.
+configurations { jacocoAntOffline; jacocoAgentRuntime }
+dependencies {
+    jacocoAntOffline 'org.jacoco:org.jacoco.ant:0.8.11'
+    jacocoAgentRuntime 'org.jacoco:org.jacoco.agent:0.8.11:runtime'
+}
+
+def coverageExclusions = [
+        '**/R.class',
+        '**/R$*.class',
+        '**/BuildConfig.*',
+        '**/Manifest*.*'
+]
+def offlineInstrDir = layout.buildDirectory.dir('jacoco-instrumented/debug')
+def offlineExecFile = layout.buildDirectory.file('jacoco/testDebugUnitTest.exec')
+
+tasks.register('instrumentDebugClasses', DefaultTask) {
+    dependsOn tasks.named('compileDebugJavaWithJavac')
+    outputs.dir(offlineInstrDir)
+    doLast {
+        def outDir = offlineInstrDir.get().asFile
+        delete(outDir)
+        outDir.mkdirs()
+        ant.taskdef(name: 'jacocoInstrument',
+                classname: 'org.jacoco.ant.InstrumentTask',
+                classpath: configurations.jacocoAntOffline.asPath)
+        ant.jacocoInstrument(destdir: outDir) {
+            fileset(dir: "${buildDir}/intermediates/javac/debug/compileDebugJavaWithJavac/classes") {
+                include(name: 'me/pompel/elauncher/**')
+            }
+        }
+    }
+}
+
+tasks.matching { it.name == 'testDebugUnitTest' }.configureEach {
+    dependsOn tasks.named('instrumentDebugClasses')
+    doFirst {
+        systemProperty 'jacoco-agent.destfile', offlineExecFile.get().asFile.absolutePath
+        classpath = files(offlineInstrDir) + classpath + configurations.jacocoAgentRuntime
+    }
+}
+
+tasks.register('jacocoUnitTestReport', JacocoReport) {
+    dependsOn tasks.named('testDebugUnitTest')
+    reports {
+        xml.required = true
+        html.required = true
+    }
+    def debugTree = fileTree(dir: "${buildDir}/intermediates/javac/debug/compileDebugJavaWithJavac/classes",
+            excludes: coverageExclusions)
+    classDirectories.setFrom(files([debugTree]))
+    sourceDirectories.setFrom(files("${project.projectDir}/src/main/java"))
+    executionData.setFrom(offlineExecFile)
 }
 
 dependencies {
@@ -36,6 +101,16 @@ dependencies {
     implementation "androidx.recyclerview:recyclerview:1.3.2"
     implementation 'androidx.appcompat:appcompat:1.6.1'
     implementation 'androidx.preference:preference:1.2.1'
+
+    // JVM unit-test stack: Robolectric + Cucumber-JVM (BDD)
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.robolectric:robolectric:4.14.1'
+    testImplementation 'androidx.test:core:1.6.1'
+    testImplementation 'androidx.test.ext:junit:1.2.1'
+    testImplementation 'androidx.test.espresso:espresso-core:3.6.1'
+    testImplementation 'io.cucumber:cucumber-java:7.18.1'
+    testImplementation 'io.cucumber:cucumber-junit:7.18.1'
+
 
     constraints {
         implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.8.0") {
