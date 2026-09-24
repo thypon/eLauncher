@@ -1,0 +1,33 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    "helpers:pinGitHubActionDigestsToSemver",
+    "schedule:weekly"
+  ],
+  "dependencyDashboard": true,
+  "packageRules": [
+    {
+      "matchUpdateTypes": ["minor", "major", "patch", "pin", "pinDigest", "digest"],
+      "minimumReleaseAge": "7 days",
+      "prCreation": "not-pending"
+    },
+    {
+      "matchManagers": ["github-actions"],
+      "matchUpdateTypes": ["patch", "minor", "pin", "pinDigest"],
+      "matchCurrentAge": "> 7 days",
+      "matchPackageNames": ["actions/**", "gradle/**", "github/**"],
+      "minimumReleaseAge": "14 days",
+      "automerge": true,
+      "automergeType": "pr"
+    },
+    {
+      "matchManagers": ["gradle"],
+      "matchDepNames": ["org.robolectric:robolectric", "io.cucumber:cucumber-java", "io.cucumber:cucumber-junit", "io.cucumber:cucumber-picocontainer", "androidx.appcompat:appcompat"],
+      "minimumReleaseAge": "14 days"
+    }
+  ],
+  "vulnerabilityAlerts": {
+    "enabled": true
+  }
+}
