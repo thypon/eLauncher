@@ -84,9 +84,10 @@ public class recyclerAdapterTest {
 
     @Test
     public void exactMatchAutoLaunchesApp() throws Exception {
-        // publishResults fires the exact-match click AND the single-result click
+        // exact match must launch exactly once (the single-result rule must not
+        // fire a second click for the same query)
         filter("Beta", 1);
-        assertEquals(2, listener.clicks.size());
+        assertEquals(1, listener.clicks.size());
         assertEquals("com.c", listener.clicks.get(0).packageId);
     }
 
@@ -112,7 +113,7 @@ public class recyclerAdapterTest {
     }
 
     @Test
-    public void bindClearsSpansAndBoldActivePackages() {
+    public void bindPreservesUnderlinesAndReappliesBoldOnly() {
         App beta = apps.get(1);
         beta.appName.setSpan(new UnderlineSpan(), 0, 1, 0);
         adapter.setProcessPackages(new HashSet<>(Arrays.asList("com.b")));
@@ -123,10 +124,19 @@ public class recyclerAdapterTest {
         recyclerAdapter.AppViewHolder holder = adapter.createViewHolder(parent, 0);
         adapter.onBindViewHolder(holder, 1);
 
-        assertEquals(1, beta.appName.getSpans(0, beta.appName.length(), StyleSpan.class).length);
-        assertEquals(0, beta.appName.getSpans(0, beta.appName.length(), UnderlineSpan.class).length);
+        // underline spans survive the bind (shared appName state must not be wiped)
+        assertEquals(1, beta.appName.getSpans(0, beta.appName.length(), UnderlineSpan.class).length);
+        // bold for a recently-used app is (re)applied exactly once
         StyleSpan[] bold = beta.appName.getSpans(0, beta.appName.length(), StyleSpan.class);
+        assertEquals(1, bold.length);
         assertEquals(0, beta.appName.getSpanStart(bold[0]));
         assertEquals(4, beta.appName.getSpanEnd(bold[0]));
+
+        // a non-active app keeps its underline and gains no bold
+        App palm = apps.get(0);
+        palm.appName.setSpan(new UnderlineSpan(), 1, 2, 0);
+        adapter.onBindViewHolder(adapter.createViewHolder(parent, 0), 0);
+        assertEquals(1, palm.appName.getSpans(0, palm.appName.length(), UnderlineSpan.class).length);
+        assertEquals(0, palm.appName.getSpans(0, palm.appName.length(), StyleSpan.class).length);
     }
 }

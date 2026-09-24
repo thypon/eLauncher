@@ -24,6 +24,11 @@ public class SettingsSteps {
         world.startSettings();
     }
 
+    @Given("the {word} gesture is assigned to a missing app")
+    public void gestureAssignedToMissingApp(String side) {
+        world.setGesturePackage(side, "com.ghost.app");
+    }
+
     @Given("the system is in night mode")
     public void systemInNightMode() {
         AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES);

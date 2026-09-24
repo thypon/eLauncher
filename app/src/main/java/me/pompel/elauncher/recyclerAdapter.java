@@ -79,6 +79,7 @@ public class recyclerAdapter extends RecyclerView.Adapter<recyclerAdapter.AppVie
             protected void publishResults(CharSequence charSequence, FilterResults filterResults) {
                 appListFiltered = (ArrayList<App>)filterResults.values;
 
+                boolean autoLaunched = false;
                 for (App app : appListFiltered) {
                     // extract the app name characters which were matched by the filter
                     // the match is case-insensitive and it's a fuzzy match
@@ -107,6 +108,7 @@ public class recyclerAdapter extends RecyclerView.Adapter<recyclerAdapter.AppVie
                     // if an exact match, exit and click on it
                     if (app.appName.length() == charSequence.length() && appNameQueue.isEmpty() && matchQueue.isEmpty()) {
                         listener.onClick(app);
+                        autoLaunched = true;
                         break;
                     }
 
@@ -117,7 +119,7 @@ public class recyclerAdapter extends RecyclerView.Adapter<recyclerAdapter.AppVie
                     }
                 }
 
-                if (appListFiltered.size() == 1) listener.onClick(appListFiltered.get(0));
+                if (!autoLaunched && appListFiltered.size() == 1) listener.onClick(appListFiltered.get(0));
                 notifyDataSetChanged();
             }
         };
@@ -155,8 +157,10 @@ public class recyclerAdapter extends RecyclerView.Adapter<recyclerAdapter.AppVie
         String packageId = appListFiltered.get(position).packageId;
         holder.nameText.setText(appName);
 
-        // remove all the spans after the string has been set
-        Object[] spans = appName.getSpans(0, appName.length(), Object.class);
+        // remove only the bold spans after the string has been set; keep the
+        // fuzzy-search UnderlineSpans so matched characters stay underlined
+        // on any later rebind (the underline spans are shared state on appName)
+        Object[] spans = appName.getSpans(0, appName.length(), StyleSpan.class);
         for (Object span : spans) {
             appName.removeSpan(span);
         }
