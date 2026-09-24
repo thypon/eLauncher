@@ -11,12 +11,14 @@ import android.os.Looper;
 import android.preference.PreferenceManager;
 import android.view.View;
 import android.widget.TextView;
+import androidx.appcompat.app.AppCompatDelegate;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.test.core.app.ActivityScenario;
 import androidx.test.core.app.ApplicationProvider;
 import androidx.test.espresso.action.ViewActions;
 import me.pompel.elauncher.App;
 import me.pompel.elauncher.MainActivity;
+import me.pompel.elauncher.SettingsActivity;
 import me.pompel.elauncher.R;
 import me.pompel.elauncher.recyclerAdapter;
 import org.robolectric.shadows.ShadowApplication;
@@ -40,6 +42,19 @@ import static org.robolectric.Shadows.shadowOf;
 /** Shared per-scenario state and helpers for BDD steps (picocontainer-managed). */
 public class LauncherWorld {
     public ActivityScenario<MainActivity> scenario;
+    public ActivityScenario<SettingsActivity> settingsScenario;
+
+    /** All scenarios of a feature share one Robolectric sandbox, so the default
+     * SharedPreferences file leaks between scenarios (e.g. a dark-mode toggle persisted
+     * by an earlier scenario suppresses later seeding logic). AppCompatDelegate's default
+     * night mode is static too and leaks the same way. Start every scenario with clean
+     * preferences and a light system; Background steps re-seed what they need. */
+    @io.cucumber.java.Before
+    public void cleanScenarioState() {
+        AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO);
+        android.preference.PreferenceManager.getDefaultSharedPreferences(appContext())
+                .edit().clear().commit();
+    }
 
     public Context appContext() {
         return androidx.test.core.app.ApplicationProvider.getApplicationContext();
@@ -269,14 +284,14 @@ public class LauncherWorld {
 
     // ---- synthetic gesture dispatch -------------------------------------------------------
 
-    private void dispatch(android.view.MotionEvent event, MainActivity a) {
+    private void dispatch(android.view.MotionEvent event, android.app.Activity a) {
         a.dispatchTouchEvent(event);
         event.recycle();
     }
 
-    /** Dispatches a touch stream through the activity: DOWN at (x0,y0), `steps` MOVE events
+    /** Dispatches a touch stream through an activity: DOWN at (x0,y0), `steps` MOVE events
      * of (dx,dy) each `stepMs` milliseconds apart, then UP. Velocity ≈ dx/stepMs px per ms. */
-    private void runTouchStream(MainActivity a, int x0, int y0, int dx, int dy, int steps, long stepMs) {
+    private void runTouchStream(android.app.Activity a, int x0, int y0, int dx, int dy, int steps, long stepMs) {
         long base = android.os.SystemClock.uptimeMillis();
         dispatch(android.view.MotionEvent.obtain(base, base,
                 android.view.MotionEvent.ACTION_DOWN, x0, y0, 0), a);
@@ -378,6 +393,127 @@ public class LauncherWorld {
     public void pressBack() {
         scenario.onActivity(a -> a.onBackPressed());
         idle();
+    }
+
+    // ---- settings screen helpers ---------------------------------------------------------
+
+    public void startSettings() {
+        settingsScenario = androidx.test.core.app.ActivityScenario.launch(SettingsActivity.class);
+        idle();
+    }
+
+    public SettingsActivity settingsActivity() {
+        SettingsActivity[] ref = new SettingsActivity[1];
+        settingsScenario.onActivity(a -> ref[0] = a);
+        return ref[0];
+    }
+
+    /** Vertical fling on the settings screen (SettingsActivity restarts the launcher on up-fling). */
+    public void flingOnSettings(String direction) {
+        settingsScenario.onActivity(a -> {
+            int w = a.getResources().getDisplayMetrics().widthPixels;
+            int h = a.getResources().getDisplayMetrics().heightPixels;
+            int x0 = w / 2, y0 = h - 20, dx = 0, dy = 0;
+            if ("up".equals(direction)) dy = -60;
+            else if ("down".equals(direction)) dy = 60;
+            else throw new IllegalArgumentException("unknown direction: " + direction);
+            runTouchStream(a, x0, y0, dx, dy, 8, 16L);
+        });
+        idle();
+    }
+
+    /** Long press on the settings screen (DOWN, let the 500ms timer fire, UP). */
+    public void longPressOnSettings() {
+        settingsScenario.onActivity(a -> {
+            int w = a.getResources().getDisplayMetrics().widthPixels;
+            int h = a.getResources().getDisplayMetrics().heightPixels;
+            long base = android.os.SystemClock.uptimeMillis();
+            dispatch(android.view.MotionEvent.obtain(base, base,
+                    android.view.MotionEvent.ACTION_DOWN, w / 2, h - 20, 0), a);
+        });
+        org.robolectric.Shadows.shadowOf(Looper.getMainLooper()).idleFor(700, TimeUnit.MILLISECONDS);
+        settingsScenario.onActivity(a -> {
+            int w = a.getResources().getDisplayMetrics().widthPixels;
+            int h = a.getResources().getDisplayMetrics().heightPixels;
+            long base = android.os.SystemClock.uptimeMillis();
+            dispatch(android.view.MotionEvent.obtain(base, base + 700,
+                    android.view.MotionEvent.ACTION_UP, w / 2, h - 20, 0), a);
+        });
+        idle();
+    }
+
+    /** Drives SettingsActivity.onBackPressed() (restarts the launcher). */
+    public void pressBackOnSettings() {
+        settingsScenario.onActivity(a -> a.onBackPressed());
+        idle();
+    }
+
+    public void clickGestureButton(String side) {
+        onView(withId(side.equals("left") ? R.id.left_gesture_button : R.id.right_gesture_button)).perform(click());
+        idle();
+    }
+
+    public String gestureButtonLabel(String side) {
+        int id = side.equals("left") ? R.id.left_gesture_button : R.id.right_gesture_button;
+        android.view.View view = findInSettings(
+                v -> v instanceof android.widget.Button && v.getId() == id);
+        if (view == null) throw new AssertionError("No " + side + " gesture button found");
+        return ((android.widget.Button) view).getText().toString();
+    }
+
+    /** Searches the settings activity's view hierarchy (used for preference widgets that are
+     * awkward to address with Espresso matchers under Robolectric). */
+    public android.view.View findInSettings(java.util.function.Predicate<android.view.View> test) {
+        android.view.View root = settingsActivity().getWindow().getDecorView();
+        final android.view.View[] found = new android.view.View[1];
+        collect(root, test, found);
+        return found[0];
+    }
+
+    public boolean darkModeSwitchChecked() {
+        android.view.View view = findInSettings(v -> v instanceof androidx.appcompat.widget.SwitchCompat);
+        if (view == null) throw new AssertionError("No dark mode switch found");
+        return ((androidx.appcompat.widget.SwitchCompat) view).isChecked();
+    }
+
+    public void toggleDarkModeSwitch() {
+        android.view.View view = findInSettings(v -> v instanceof androidx.appcompat.widget.SwitchCompat);
+        if (view == null) throw new AssertionError("No dark mode switch found");
+        view.performClick();
+        idle();
+    }
+
+    /** The number-of-apps SeekBarPreference renders an inline SeekBar (showSeekBarValue defaults
+     * to true, so no dialog appears). Programmatic setProgress notifies the listener with
+     * fromUser=false and androidx persists only on user input — invoke the bound listener
+     * directly with fromUser=true to emulate a completed drag. */
+    public void setNumberOfApps(int value) {
+        android.view.View view = findInSettings(v -> v instanceof android.widget.SeekBar);
+        if (view == null) throw new AssertionError("No SeekBar found in settings");
+        android.widget.SeekBar seekBar = (android.widget.SeekBar) view;
+        android.widget.SeekBar.OnSeekBarChangeListener listener;
+        try {
+            java.lang.reflect.Field f = android.widget.SeekBar.class
+                    .getDeclaredField("mOnSeekBarChangeListener");
+            f.setAccessible(true);
+            listener = (android.widget.SeekBar.OnSeekBarChangeListener) f.get(seekBar);
+        } catch (ReflectiveOperationException e) {
+            throw new RuntimeException(e);
+        }
+        if (listener == null) throw new AssertionError("No OnSeekBarChangeListener bound");
+        listener.onStartTrackingTouch(seekBar);
+        seekBar.setProgress(value);
+        listener.onProgressChanged(seekBar, value, true);
+        listener.onStopTrackingTouch(seekBar);
+        idle();
+    }
+
+    public boolean booleanPref(String key) {
+        return android.preference.PreferenceManager.getDefaultSharedPreferences(appContext()).getBoolean(key, false);
+    }
+
+    public int intPref(String key) {
+        return android.preference.PreferenceManager.getDefaultSharedPreferences(appContext()).getInt(key, 0);
     }
 
     public boolean homeVisible() {
