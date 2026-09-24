@@ -34,6 +34,6 @@ jobs:
       - name: Build
         run: ./gradlew assembleDebug
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@0b1f0509b2ddb4dc7bd94367abfe7ad1d8a1b810 # v3.30.5
+        uses: github/codeql-action/analyze@3599b3baa15b485a2e49ef411a7a4bb2452e7f93 # v3.30.5
         with:
           category: '/language:java'
