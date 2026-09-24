@@ -10,6 +10,7 @@ import android.content.pm.ResolveInfo;
 import android.os.Looper;
 import android.preference.PreferenceManager;
 import android.view.View;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 import androidx.appcompat.app.AppCompatDelegate;
 import androidx.recyclerview.widget.RecyclerView;
@@ -54,6 +55,8 @@ public class LauncherWorld {
         AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO);
         android.preference.PreferenceManager.getDefaultSharedPreferences(appContext())
                 .edit().clear().commit();
+        // usage events accumulate in static shadow state and leak across scenarios
+        org.robolectric.shadows.ShadowUsageStatsManager.reset();
     }
 
     public Context appContext() {
@@ -241,6 +244,57 @@ public class LauncherWorld {
         shadowOf((android.app.AppOpsManager) appContext().getSystemService(android.content.Context.APP_OPS_SERVICE))
                 .setMode(android.app.AppOpsManager.OPSTR_GET_USAGE_STATS,
                         android.os.Process.myUid(), appContext().getPackageName(), mode);
+    }
+
+    /** Records a usage-stats entry, as if the given fixture app had last been used
+     * the given number of minutes ago (mirrors UsageStatsManager.queryUsageStats
+     * INTERVAL_DAILY semantics the app relies on). */
+    public void addUsageStats(String label, long minutesAgo) {
+        long lastTimeUsed = System.currentTimeMillis() - TimeUnit.MINUTES.toMillis(minutesAgo);
+        android.app.usage.UsageStats stats = org.robolectric.shadows.ShadowUsageStatsManager.UsageStatsBuilder.newBuilder()
+                .setPackageName(pkgFor(label))
+                .setFirstTimeStamp(lastTimeUsed - TimeUnit.MINUTES.toMillis(1))
+                .setLastTimeStamp(lastTimeUsed)
+                .setLastTimeUsed(lastTimeUsed)
+                .setTotalTimeInForeground(60_000)
+                .build();
+        android.app.usage.UsageStatsManager usm = (android.app.usage.UsageStatsManager)
+                appContext().getSystemService(android.content.Context.USAGE_STATS_SERVICE);
+        shadowOf(usm).addUsageStats(android.app.usage.UsageStatsManager.INTERVAL_DAILY, stats);
+    }
+
+    /** The dedicated last-app row is appended after the homescreen slots. */
+    private TextView lastAppRow() {
+        LinearLayout home = activity().findViewById(R.id.HomeScreen);
+        View view = home.getChildAt(home.getChildCount() - 1);
+        if (!(view instanceof TextView)) throw new AssertionError("Last app row missing");
+        return (TextView) view;
+    }
+
+    public int homeRowCount() {
+        LinearLayout home = activity().findViewById(R.id.HomeScreen);
+        return home.getChildCount();
+    }
+
+    public void tapLastAppRow() {
+        lastAppRow().performClick();
+        idle();
+    }
+
+    public String lastAppText() {
+        return lastAppRow().getText().toString();
+    }
+
+    public boolean slotTextIsBold(int slot) {
+        LinearLayout home = activity().findViewById(R.id.HomeScreen);
+        TextView slotView = (TextView) home.getChildAt(slot);
+        if (!(slotView.getText() instanceof android.text.Spanned)) return false;
+        android.text.style.StyleSpan[] spans = ((android.text.Spanned) slotView.getText())
+                .getSpans(0, slotView.length(), android.text.style.StyleSpan.class);
+        for (android.text.style.StyleSpan span : spans) {
+            if ((span.getStyle() & android.graphics.Typeface.BOLD) != 0) return true;
+        }
+        return false;
     }
 
     public void startLauncher() {
