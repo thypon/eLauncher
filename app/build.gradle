@@ -145,7 +145,7 @@ dependencies {
     testImplementation 'androidx.test.ext:junit:1.2.1'
     testImplementation 'androidx.test.espresso:espresso-core:3.6.1'
     testImplementation 'androidx.test.espresso:espresso-contrib:3.6.1'
-    testImplementation 'io.cucumber:cucumber-java:7.18.1'
+    testImplementation 'io.cucumber:cucumber-java:7.34.8'
     testImplementation 'io.cucumber:cucumber-junit:7.18.1'
     testImplementation 'io.cucumber:cucumber-picocontainer:7.18.1'
 
