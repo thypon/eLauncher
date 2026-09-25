@@ -44,7 +44,7 @@ jobs:
         run: python3 scripts/cover2cover.py app/build/reports/jacoco/jacocoUnitTestReport/jacocoUnitTestReport.xml app/src/main/java > cobertura.xml
 
       - name: Upload coverage to GitHub Code Quality
-        uses: actions/upload-code-coverage@d8e329117199404bba6fc81efe8093dc7c015e34 # v1.0.0
+        uses: actions/upload-code-coverage@d8e329117199404bba6fc81efe8093dc7c015e34 # v1.4.2
         with:
           file: cobertura.xml
           language: Java
