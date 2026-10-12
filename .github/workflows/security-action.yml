@@ -19,6 +19,6 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
         with:
           fetch-depth: 0
-      - uses: brave/security-action/actions/main@main
+      - uses: brave/security-action/actions/main@100521704ee7077d1404b84827b7a41daa4af4a3 # main
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
