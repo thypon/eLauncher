@@ -3,6 +3,18 @@ plugins {
     id 'jacoco'
 }
 
+// F-Droid/CI version override: .github/workflows/fdroid-repo.yml computes
+// versionName as major.minor.<commits-after-latest-vX.Y tag> and a monotonic
+// composite versionCode (major*1000000 + minor*10000 + count). Falls back to
+// the static values below for local builds.
+def fdroidVersionCode = project.findProperty('fdroidVersionCode') as String ?: null
+def fdroidVersionName = project.findProperty('fdroidVersionName') as String ?: null
+
+// Release signing via env vars (set in CI from the APK_KEYSTORE* secrets).
+// When absent (local development), fall back to the debug keystore so
+// `assembleRelease` stays runnable everywhere.
+def releaseKeystorePath = System.getenv('ELAUNCHER_APK_KEYSTORE')
+
 android {
     namespace 'me.pompel.elauncher'
     compileSdk 34
@@ -11,10 +23,21 @@ android {
         applicationId "me.pompel.elauncher"
         minSdk 19
         targetSdk 34
-        versionCode 4
-        versionName "2.2"
+        versionCode fdroidVersionCode != null ? fdroidVersionCode.toInteger() : 4
+        versionName fdroidVersionName != null ? fdroidVersionName : "2.2"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    signingConfigs {
+        release {
+            if (releaseKeystorePath != null) {
+                storeFile file(releaseKeystorePath)
+                storePassword System.getenv('ELAUNCHER_APK_KEYSTORE_PASSWORD')
+                keyAlias System.getenv('ELAUNCHER_APK_KEY_ALIAS')
+                keyPassword System.getenv('ELAUNCHER_APK_KEY_PASSWORD')
+            }
+        }
     }
 
     buildTypes {
@@ -23,7 +46,7 @@ android {
             minifyEnabled true
             shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt')
-            signingConfig signingConfigs.debug
+            signingConfig releaseKeystorePath != null ? signingConfigs.release : signingConfigs.debug
         }
     }
     compileOptions {

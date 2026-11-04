@@ -1,0 +1,191 @@
+name: F-Droid repo
+
+# Builds the current master APK, updates the self-hosted F-Droid binary
+# repository on the orphan branch `fdroid-repo`, and deploys it to GitHub
+# Pages: https://thypon.github.io/eLauncher/fdroid/repo
+#
+# Users add the repo in the F-Droid client as:
+#   https://thypon.github.io/eLauncher/fdroid/repo?fingerprint=<SHA256 of the
+#   repo signing certificate, printed in the workflow summary of every run>
+#
+# Required Actions secrets:
+#   APK_KEYSTORE_BASE64      base64 of the app release keystore (.jks)
+#   APK_KEYSTORE_PASSWORD    app keystore password
+#   APK_KEY_ALIAS            app key alias
+#   APK_KEY_PASSWORD         app key password
+#   FDROID_KEYSTORE_BASE64   base64 of the repo index keystore (.jks, fdroid init)
+#   FDROID_KEYSTORE_PASS     repo index keystore password (= keypass)
+
+on:
+  push:
+    branches: [master]
+  schedule:
+    # Weekly touch-up: keeps the index fresh (clients reject stale indexes).
+    - cron: '17 4 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: write # commit and push the fdroid-repo orphan branch
+  pages: write
+  id-token: write
+
+concurrency:
+  group: fdroid-repo
+  cancel-in-progress: false
+
+jobs:
+  build-and-publish:
+    name: Build master APK, update F-Droid repo, deploy to Pages
+    runs-on: ubuntu-latest
+    steps:
+      # Full history: needs tags for versioning and rev-list for the commit count.
+      - uses: actions/checkout@v4 # 11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+
+      - name: Compute version from tags
+        id: version
+        run: |
+          TAG=$(git describe --tags --match 'v*.*' --abbrev=0)
+          VER=${TAG#v}
+          MAJOR=${VER%%.*}
+          MINOR=${VER#*.}
+          COUNT=$(git rev-list "${TAG}..HEAD" --count)
+          VERSION_NAME="${MAJOR}.${MINOR}.${COUNT}"
+          VERSION_CODE=$((MAJOR * 1000000 + MINOR * 10000 + COUNT))
+          {
+            echo "tag=${TAG}"
+            echo "version_name=${VERSION_NAME}"
+            echo "version_code=${VERSION_CODE}"
+          } >> "$GITHUB_OUTPUT"
+          echo "versionName=${VERSION_NAME} (tag ${TAG}, +${COUNT} commits), versionCode=${VERSION_CODE}"
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4 # c5195efecf7bdfc987ee8bae7a71cb8b11521c00
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Gradle cache
+        uses: gradle/actions/setup-gradle@v4 # 42ebad84b0585498c0413b0967cf4e80ec0e1d19
+
+      - name: Decode app signing keystore
+        run: |
+          printf '%s' "${{ secrets.APK_KEYSTORE_BASE64 }}" | base64 -d > "$RUNNER_TEMP/apk-keystore.jks"
+
+      - name: Build signed release APK
+        run: >
+          ./gradlew assembleRelease --stacktrace
+          -PfdroidVersionName=${{ steps.version.outputs.version_name }}
+          -PfdroidVersionCode=${{ steps.version.outputs.version_code }}
+        env:
+          ELAUNCHER_APK_KEYSTORE: ${{ runner.temp }}/apk-keystore.jks
+          ELAUNCHER_APK_KEYSTORE_PASSWORD: ${{ secrets.APK_KEYSTORE_PASSWORD }}
+          ELAUNCHER_APK_KEY_ALIAS: ${{ secrets.APK_KEY_ALIAS }}
+          ELAUNCHER_APK_KEY_PASSWORD: ${{ secrets.APK_KEY_PASSWORD }}
+
+      # Stash artifacts and the fdroid config from master, then switch the
+      # working tree to the orphan branch that stores the repository state.
+      - name: Stage artifacts, switch to fdroid-repo orphan branch
+        run: |
+          cp app/build/outputs/apk/release/app-release.apk "$RUNNER_TEMP/eLauncher.apk"
+          cp -r fdroid "$RUNNER_TEMP/fdroid-base"
+          rm -f "$RUNNER_TEMP/apk-keystore.jks"
+          git switch --orphan fdroid-repo
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          echo '* -text' > .gitattributes
+          # Restore the previous repository state (APKs + committed index)
+          # onto the orphan branch; falls back to an empty tree on first run.
+          if git ls-remote --heads origin fdroid-repo | grep -q .; then
+            git fetch --depth=1 origin fdroid-repo
+            git restore --source=FETCH_HEAD -- fdroid .gitattributes
+          fi
+
+      - name: Assemble repository state
+        run: |
+          mkdir -p fdroid/repo fdroid/metadata
+          cp -r "$RUNNER_TEMP/fdroid-base/." fdroid/
+          chmod 600 fdroid/config.yml
+          printf '%s' "${{ secrets.FDROID_KEYSTORE_BASE64 }}" | base64 -d > fdroid/keystore.jks
+          cp "$RUNNER_TEMP/eLauncher.apk" "fdroid/repo/me.pompel.elauncher_${{ steps.version.outputs.version_code }}.apk"
+
+          # Keep only the 30 newest APKs.
+          cd fdroid/repo
+          find . -maxdepth 1 -name 'me.pompel.elauncher_*.apk' -printf '%f\n' \
+            | sort -t_ -k2 -n | head -n -30 | xargs -r rm -f
+          cd ../..
+          git add -A fdroid .gitattributes
+
+      - name: Install fdroidserver
+        run: |
+          pipx install fdroidserver
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          # apksigner for fdroid update's APK verification.
+          BT=$(find "$ANDROID_HOME/build-tools" -maxdepth 1 -mindepth 1 -type d | sort -V | tail -1)
+          echo "$BT" >> "$GITHUB_PATH"
+
+      - name: Update F-Droid repository (sign index)
+        env:
+          FDROID_KEYSTORE_PASS: ${{ secrets.FDROID_KEYSTORE_PASS }}
+        run: |
+          cd fdroid
+          fdroid update
+          cd ..
+          # Signed index artifacts are committed as part of the repo state.
+          git add -A fdroid
+
+      - name: Repository fingerprint
+        run: |
+          FP=$(keytool -list -v -keystore fdroid/keystore.jks -alias fdroidrepo \
+            -storepass "${{ secrets.FDROID_KEYSTORE_PASS }}" \
+            | grep 'SHA256:' | head -1 | sed 's/.*SHA256: *//; s/://g' | tr 'A-F' 'a-f')
+          {
+            echo "### F-Droid repository published"
+            echo ""
+            echo "Add this URL in the F-Droid client (Settings → Repositories → +):"
+            echo ""
+            echo '```'
+            echo "https://thypon.github.io/eLauncher/fdroid/repo?fingerprint=${FP}"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Commit repository state
+        id: commit
+        run: |
+          if git diff --cached --quiet; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git commit -q -m "fdroid: ${{ steps.version.outputs.version_name }} (code ${{ steps.version.outputs.version_code }})"
+          git push -q origin fdroid-repo
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Stage Pages artifact
+        if: steps.commit.outputs.changed == 'true' || github.event_name == 'workflow_dispatch'
+        run: |
+          mkdir -p "$RUNNER_TEMP/pages"
+          cp -r fdroid "$RUNNER_TEMP/pages/fdroid"
+          cat > "$RUNNER_TEMP/pages/index.html" <<'EOF'
+          <!DOCTYPE html>
+          <html lang="en">
+          <head><meta charset="utf-8"><title>eLauncher F-Droid repo</title></head>
+          <body>
+          <h1>eLauncher F-Droid repository</h1>
+          <p>Add to the F-Droid client (Settings → Repositories → +):</p>
+          <p><code>https://thypon.github.io/eLauncher/fdroid/repo?fingerprint=2d19154ca98ad6d062cf0bfccdb2721536451b1d9a11b3f3690cbd9cf07f6555</code></p>
+          <p>The fingerprint is printed in each run of the
+          <a href="https://github.com/thypon/eLauncher/actions/workflows/fdroid-repo.yml">F-Droid repo workflow</a>.</p>
+          </body>
+          </html>
+          EOF
+
+      - name: Upload Pages artifact
+        if: steps.commit.outputs.changed == 'true' || github.event_name == 'workflow_dispatch'
+        uses: actions/upload-pages-artifact@v3 # 56afc609e74202658d3ffba0e8f6dda462b719fa
+        with:
+          path: ${{ runner.temp }}/pages
+
+      - name: Deploy to GitHub Pages
+        if: steps.commit.outputs.changed == 'true' || github.event_name == 'workflow_dispatch'
+        uses: actions/deploy-pages@v4 # d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e

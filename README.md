@@ -1,5 +1,9 @@
 # eLauncher
 
+<p align="center">
+  <img src="assets/logo.svg" width="140" alt="eLauncher logo"/>
+</p>
+
 eLauncher is an extremely lightweight and minimal launcher for Android, based on NoLauncher and inspired by [OLauncher Light](https://github.com/tanujnotes/Ultra/), and OLauncher in general. It is even more barebones than OLauncher Light, and aims to provide only the most basic features.
 
 eLauncher favours easy readibility on eInk/ePaper devices, such as the Onyx Boox Note series, and the Bigme HiBreak.
@@ -25,6 +29,14 @@ This might have been done on purpose, but OLauncher Light uses long deprecated A
 ## Download
 
 You can download the apk file directly from the releases tab and install it manually.
+
+You can also add the repository to the [F-Droid client](https://f-droid.org/) to receive the current build of master as an automatic update. In the client, go to Settings → Repositories → + and add:
+
+```
+https://thypon.github.io/eLauncher/fdroid/repo?fingerprint=2d19154ca98ad6d062cf0bfccdb2721536451b1d9a11b3f3690cbd9cf07f6555
+```
+
+The SHA-256 fingerprint of the repository signing key is `2d19154ca98ad6d062cf0bfccdb2721536451b1d9a11b3f3690cbd9cf07f6555` (also printed in the summary of every run of the [F-Droid repo workflow](https://github.com/thypon/eLauncher/actions/workflows/fdroid-repo.yml)). Versions are built automatically on every push to master; the 30 newest builds are kept in the repository.
 
 ## Contributing
 
