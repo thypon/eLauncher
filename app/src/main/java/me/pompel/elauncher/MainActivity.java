@@ -215,7 +215,8 @@ public class MainActivity extends AppCompatActivity {
                 
             case MotionEvent.ACTION_UP:
             case MotionEvent.ACTION_CANCEL:
-                // Reset flags when touch ends
+                // Flags intentionally persist after the touch ends so a tap near
+                // an edge can be paired with the next back press (onBackPressed).
                 break;
         }
         return super.dispatchTouchEvent(ev);
@@ -568,12 +569,29 @@ public class MainActivity extends AppCompatActivity {
                     float xDiff = e2.getX() - e1.getX();
                     float yDiff = e2.getY() - e1.getY();
                     if (Math.abs(xDiff) > Math.abs(yDiff) && Math.abs(xDiff) > 100 && Math.abs(velocityX) > 100) {
-                        if (xDiff > 0) {
-                            launchGesturePackageOrDefault("right_gesture_package",
-                                getDefaultBrowserIntent());
-                        } else {
+                        if (isLeftEdge || isRightEdge) {
+                            boolean inward = (isLeftEdge && xDiff > 0) || (isRightEdge && xDiff < 0);
+                            if (inward) {
+                                // Fast inward fling from an edge: same app as the
+                                // matching edge tap (left edge -> left gesture app).
+                                if (isLeftEdge)
+                                    launchGesturePackageOrDefault("left_gesture_package",
+                                        getDefaultLeftGestureIntent());
+                                else
+                                    launchGesturePackageOrDefault("right_gesture_package",
+                                        getDefaultBrowserIntent());
+                            }
+                            // Outward fling (finger leaves the screen): no app launch.
+                            // Keep isBackGesture set so the next back press swallows too.
+                            isBackGesture = true;
+                        } else if (xDiff > 0) {
+                            // Rightward fling pulls the left side in (same as the left edge)
                             launchGesturePackageOrDefault("left_gesture_package",
                                 getDefaultLeftGestureIntent());
+                        } else {
+                            // Leftward fling pulls the right side in (same as the right edge)
+                            launchGesturePackageOrDefault("right_gesture_package",
+                                getDefaultBrowserIntent());
                         }
                     }
                     else if (Math.abs(yDiff) > 100 && Math.abs(velocityY) > 100) {

@@ -1,44 +1,45 @@
 Feature: Home screen gestures
   The home screen reacts to flings, double taps and long presses.
-  Horizontal flings open the configured gesture app or a sensible default
-  (dialer/camera to the left, browser to the right); vertical flings control
-  the app drawer and the notification shade.
+  Horizontal flings are side-based, like pulling a screen edge inward:
+  a rightward fling opens the left gesture app (dialer/camera by default),
+  a leftward fling opens the right gesture app (browser by default);
+  vertical flings control the app drawer and the notification shade.
 
   Background:
     Given usage access onboarding is already done
     And the launcher is started
 
-  Scenario: Fling left opens the camera when no phone app can make calls
-    When I fling left on the home screen
+  Scenario: Fling right opens the camera when no phone app can make calls
+    When I fling right on the home screen
     Then the camera opens
 
-  Scenario: Fling left opens the dialer when a phone app is installed
+  Scenario: Fling right opens the dialer when a phone app is installed
     Given a phone app "Dialer" is installed
-    When I fling left on the home screen
+    When I fling right on the home screen
     Then the dialer opens
 
-  Scenario: Fling right opens the browser picker when no default browser exists
-    When I fling right on the home screen
+  Scenario: Fling left opens the browser picker when no default browser exists
+    When I fling left on the home screen
     Then the browser picker opens
 
-  Scenario: Fling right opens the default browser app
+  Scenario: Fling left opens the default browser app
     Given a browser app "Browse" is installed
-    When I fling right on the home screen
+    When I fling left on the home screen
     Then the "com.fixtures.browse" app is launched
 
-  Scenario: Fling left opens the configured left gesture app
+  Scenario: Fling right opens the configured left gesture app
     Given the app "Cool" is assigned to the left gesture
-    When I fling left on the home screen
+    When I fling right on the home screen
     Then the "com.fixtures.cool" app is launched
 
-  Scenario: Fling right opens the configured right gesture app
+  Scenario: Fling left opens the configured right gesture app
     Given the app "Cool" is assigned to the right gesture
-    When I fling right on the home screen
+    When I fling left on the home screen
     Then the "com.fixtures.cool" app is launched
 
   Scenario: A stale gesture package is cleared and the default is used
     Given the left gesture is assigned to the missing app "com.fixtures.gone"
-    When I fling left on the home screen
+    When I fling right on the home screen
     Then the camera opens
     And the left gesture preference is cleared
 
