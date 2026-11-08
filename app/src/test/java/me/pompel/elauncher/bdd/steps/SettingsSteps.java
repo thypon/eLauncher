@@ -112,4 +112,27 @@ public class SettingsSteps {
                 (flags & Intent.FLAG_ACTIVITY_NEW_TASK) != 0
                         && (flags & Intent.FLAG_ACTIVITY_CLEAR_TASK) != 0);
     }
+
+    @Then("the settings screen uses the {word} theme")
+    public void settingsScreenUsesTheme(String theme) {
+        boolean dark = "dark".equals(theme);
+        int expected = dark ? 0xFFFFFFFF : 0xFF000000;
+        world.await(() -> world.settingsPrimaryColor() == expected
+                && world.settingsTitleTextColor() == expected);
+    }
+
+    @Then("the settings rows use the launcher typography")
+    public void settingsRowsUseLauncherTypography() {
+        world.await(() -> {
+            android.view.View view = world.findInSettings(
+                    v -> v instanceof android.widget.TextView && v.getId() == android.R.id.title);
+            if (!(view instanceof android.widget.TextView)) return false;
+            android.widget.TextView title = (android.widget.TextView) view;
+            float density = view.getResources().getDisplayMetrics().density;
+            boolean sized = Math.abs(title.getTextSize() - 28 * density) < 0.5f;
+            boolean centered = (title.getGravity() & android.view.Gravity.HORIZONTAL_GRAVITY_MASK)
+                    == android.view.Gravity.CENTER_HORIZONTAL;
+            return sized && centered;
+        });
+    }
 }

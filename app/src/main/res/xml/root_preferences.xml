@@ -11,14 +11,17 @@
         app:defaultValue="8"
         app:min="0"
         android:max="24"
-        app:showSeekBarValue="true" />
+        app:showSeekBarValue="true"
+        app:layout="@layout/preference_seekbar_row" />
     <SwitchPreferenceCompat
         app:key="dark_mode_preference"
         app:title="@string/dark_mode_title"
-        app:summary="@string/dark_mode_summary" />
+        app:summary="@string/dark_mode_summary"
+        app:layout="@layout/preference_row" />
     <SwitchPreferenceCompat
         app:key="lock_portrait_preference"
         app:title="@string/lock_portrait_title"
         app:summary="@string/lock_portrait_summary"
-        app:defaultValue="true" />
+        app:defaultValue="true"
+        app:layout="@layout/preference_row" />
 </PreferenceScreen>
