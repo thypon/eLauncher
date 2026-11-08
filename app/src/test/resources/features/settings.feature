@@ -7,9 +7,9 @@ Feature: Settings screen
     And the launcher has these apps installed:
       | Cool |
 
-  Scenario: Gesture buttons default to "Default"
+  Scenario: Gesture buttons show their defaults
     Given the settings screen is open
-    Then the left gesture button shows "Default"
+    Then the left gesture button shows "eBoard"
     And the right gesture button shows "Default"
 
   Scenario: Assigning an app to the left gesture
@@ -25,8 +25,15 @@ Feature: Settings screen
     And I select "Cool" in the app picker
     And I tap the left gesture button
     And I press "Reset to Default" in the dialog
-    Then the left gesture button shows "Default"
+    Then the left gesture button shows "eBoard"
     And the left gesture package is stored as ""
+
+  Scenario: Assigning eBoard to the left gesture
+    Given the settings screen is open
+    When I tap the left gesture button
+    And I select "eBoard" in the app picker
+    Then the left gesture button shows "eBoard"
+    And the left gesture package is stored as "@eboard"
 
   Scenario: Cancelling the gesture picker keeps the assignment
     Given the settings screen is open

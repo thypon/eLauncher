@@ -8,7 +8,7 @@
     <string name="lock_portrait_summary">Keep the launcher from rotating to landscape</string>
     <string name="gesture_title">Swipe Gestures</string>
     <string name="gesture_hint">Tap to pick app • \"Reset to Default\" in picker</string>
-    <string name="gesture_left_default">Default</string>
+    <string name="gesture_left_default">eBoard</string>
     <string name="gesture_right_default">Default</string>
     <string name="gesture_reset_left">Left gesture reset to default</string>
     <string name="gesture_reset_right">Right gesture reset to default</string>
@@ -17,4 +17,9 @@
     <string name="gesture_picker_right_title">Right Gesture App</string>
     <string name="gesture_picker_reset">Reset to Default</string>
     <string name="gesture_picker_cancel">Cancel</string>
+    <string name="eboard_name">eBoard</string>
+    <!-- fixture text for the widget-kind description (see LauncherWorld.installWidgetProvider) -->
+    <string name="eboard_kind_sample">A digital clock widget</string>
+    <string name="eboard_add_widget">Add widget</string>
+    <string name="eboard_empty_hint">The board is empty.\nTap “Add widget” to pin a widget.</string>
 </resources>

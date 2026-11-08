@@ -8,9 +8,9 @@ Feature: Edge gestures and back navigation
     Given usage access onboarding is already done
     And the launcher is started
 
-  Scenario: Tapping the left edge and pressing back opens the camera by default
+  Scenario: Tapping the left edge and pressing back opens the eBoard dashboard
     When I tap the left screen edge and press back
-    Then the camera opens
+    Then the eBoard dashboard opens
 
   Scenario: Tapping the right edge and pressing back opens the browser picker
     When I tap the right screen edge and press back
@@ -26,9 +26,9 @@ Feature: Edge gestures and back navigation
     Then no app was launched
     And the home screen is visible
 
-  Scenario: A fast inward fling from the left edge opens the camera by default
+  Scenario: A fast inward fling from the left edge opens the eBoard dashboard
     When I fling inward from the left screen edge
-    Then the camera opens
+    Then the eBoard dashboard opens
 
   Scenario: A fast inward fling from the right edge opens the browser picker
     When I fling inward from the right screen edge
@@ -50,12 +50,12 @@ Feature: Edge gestures and back navigation
 
   Scenario: Back press after an edge fling does not launch the app again
     When I fling inward from the left screen edge
-    Then the camera opens
+    Then the eBoard dashboard opens
     When I press back
     Then no app was launched
 
   Scenario: Edge gesture flags reset after a back press
     When I tap the left screen edge and press back
-    Then the camera opens
+    Then the eBoard dashboard opens
     When I press back
     Then no app was launched

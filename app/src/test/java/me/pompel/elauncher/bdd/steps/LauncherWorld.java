@@ -55,6 +55,9 @@ public class LauncherWorld {
         AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO);
         android.preference.PreferenceManager.getDefaultSharedPreferences(appContext())
                 .edit().clear().commit();
+        // the eBoard layout persists in its own prefs file and leaks across scenarios
+        appContext().getSharedPreferences(me.pompel.elauncher.BoardStore.PREFS_FILE, Context.MODE_PRIVATE)
+                .edit().clear().commit();
         // usage events accumulate in static shadow state and leak across scenarios
         org.robolectric.shadows.ShadowUsageStatsManager.reset();
     }
@@ -137,21 +140,6 @@ public class LauncherWorld {
         } catch (ReflectiveOperationException e) {
             throw new RuntimeException(e);
         }
-    }
-
-    /** Registers a ResolveInfo for ACTION_CALL with a tel: URI so that
-     * MainActivity.canMakePhoneCall() resolves (Robolectric has no phone app by default). */
-    public void installPhoneApp(String label) {
-        String pkg = pkgFor(label);
-        android.content.pm.ResolveInfo ri = new android.content.pm.ResolveInfo();
-        ri.activityInfo = new android.content.pm.ActivityInfo();
-        ri.activityInfo.packageName = pkg;
-        ri.activityInfo.name = pkg + ".MainActivity";
-        ri.activityInfo.applicationInfo = new android.content.pm.ApplicationInfo();
-        ri.activityInfo.applicationInfo.packageName = pkg;
-        ri.nonLocalizedLabel = label;
-        shadowOf(appContext().getPackageManager()).addResolveInfoForIntent(
-                new Intent(Intent.ACTION_CALL, android.net.Uri.parse("tel:1234567890")), ri);
     }
 
     /** Installs a launchable app that additionally resolves ACTION_VIEW http: as the
@@ -872,5 +860,339 @@ public class LauncherWorld {
 
     public void idle() {
         org.robolectric.Shadows.shadowOf(Looper.getMainLooper()).idle();
+    }
+
+    // ---- eBoard dashboard helpers ---------------------------------------------------------
+
+    public ActivityScenario<me.pompel.elauncher.DashboardActivity> dashboardScenario;
+    /** ComponentName of the fake widget provider installed by installWidgetProvider(). */
+    public android.content.ComponentName widgetProvider;
+
+    public void startDashboard() {
+        android.app.Dialog stale = org.robolectric.shadows.ShadowDialog.getLatestDialog();
+        if (stale != null && stale.isShowing()) stale.dismiss();
+        if (dashboardScenario != null) {
+            dashboardScenario.close();
+            idle(); // let the old decor detach before touching views again
+        }
+        dashboardScenario = androidx.test.core.app.ActivityScenario.launch(me.pompel.elauncher.DashboardActivity.class);
+        idle();
+    }
+
+    public me.pompel.elauncher.DashboardActivity dashboard() {
+        me.pompel.elauncher.DashboardActivity[] ref = new me.pompel.elauncher.DashboardActivity[1];
+        dashboardScenario.onActivity(a -> ref[0] = a);
+        return ref[0];
+    }
+
+    /** Closes and relaunches the eBoard, as if the user left and reopened it. */
+    public void restartDashboard() {
+        dashboardScenario.close();
+        startDashboard();
+    }
+
+    public android.appwidget.AppWidgetManager widgetManager() {
+        return android.appwidget.AppWidgetManager.getInstance(appContext());
+    }
+
+    /** Registers a fake app widget provider with the shadow AppWidgetManager;
+     * the label (popover title) and description (popover kind line) can be
+     * set for the widget-adder scenarios. */
+    public void installWidgetProvider(String label, String description) {
+        widgetProvider = new android.content.ComponentName(appContext().getPackageName(),
+                "me.fixtures.WidgetProvider");
+        android.appwidget.AppWidgetProviderInfo info = new android.appwidget.AppWidgetProviderInfo();
+        info.provider = widgetProvider;
+        info.label = label;
+        // providerInfo backs loadLabel(): a bare ActivityInfo with a
+        // non-localized label keeps the popover title deterministic
+        android.content.pm.ActivityInfo ai = new android.content.pm.ActivityInfo();
+        ai.packageName = appContext().getPackageName();
+        ai.nonLocalizedLabel = label.isEmpty() ? "Widget" : label;
+        try {
+            java.lang.reflect.Field f = android.appwidget.AppWidgetProviderInfo.class.getField("providerInfo");
+            f.set(info, ai);
+        } catch (Exception ignored) {
+        }
+        try {
+            java.lang.reflect.Field f = android.appwidget.AppWidgetProviderInfo.class
+                    .getField("descriptionRes");
+            f.set(info, appContext().getResources().getIdentifier(
+                    "eboard_kind_sample", "string", appContext().getPackageName()));
+        } catch (Exception ignored) {
+            // no descriptionRes field: popover falls back to the app name
+        }
+        shadowOf(widgetManager()).addInstalledProvider(info);
+    }
+
+    public void allowWidgetBinding(boolean allowed) {
+        shadowOf(widgetManager()).setAllowedToBindAppWidgets(allowed);
+    }
+
+    public boolean addWidgetButtonVisible() {
+        boolean[] visible = new boolean[1];
+        dashboardScenario.onActivity(a ->
+                visible[0] = a.findViewById(me.pompel.elauncher.R.id.add_widget)
+                        .getVisibility() == View.VISIBLE);
+        return visible[0];
+    }
+
+    public void tapAddWidgetButton() {
+        dashboardScenario.onActivity(a ->
+                a.findViewById(me.pompel.elauncher.R.id.add_widget).performClick());
+        idle();
+    }
+
+    public void longPressBoardEmpty() {
+        dashboardScenario.onActivity(a ->
+                a.onEmptySpaceLongPressed(0, 0)); // empty board: coordinates unused
+        idle();
+    }
+
+    public boolean adderOpen() {
+        return dashboard().adderOpen();
+    }
+
+    public void assertAdderCoversHalfBottom() {
+        android.app.Dialog latest =
+                org.robolectric.shadows.ShadowDialog.getLatestDialog();
+        if (latest == null || !latest.isShowing()) {
+            throw new AssertionError("widget adder popover is not open");
+        }
+        android.view.WindowManager.LayoutParams lp = latest.getWindow().getAttributes();
+        int half = appContext().getResources().getDisplayMetrics().heightPixels / 2;
+        if (lp.height != half) {
+            throw new AssertionError("adder height " + lp.height + " != half screen " + half);
+        }
+        if ((lp.gravity & android.view.Gravity.BOTTOM) == 0) {
+            throw new AssertionError("adder is not bottom-anchored");
+        }
+    }
+
+    public boolean adderListsKind(String label, String description) {
+        android.app.Dialog latest =
+                org.robolectric.shadows.ShadowDialog.getLatestDialog();
+        LinearLayout list = latest.findViewById(me.pompel.elauncher.R.id.adder_list);
+        for (int i = 0; i < list.getChildCount(); i++) {
+            View row = list.getChildAt(i);
+            TextView title = row.findViewById(me.pompel.elauncher.R.id.kind_title);
+            TextView sub = row.findViewById(me.pompel.elauncher.R.id.kind_sub);
+            if (title != null && sub != null
+                    && label.contentEquals(title.getText().toString())
+                    && sub.getText().toString().contains(description)) return true;
+        }
+        return false;
+    }
+
+    public boolean adderRowsShowPreview() {
+        android.app.Dialog latest =
+                org.robolectric.shadows.ShadowDialog.getLatestDialog();
+        LinearLayout list = latest.findViewById(me.pompel.elauncher.R.id.adder_list);
+        if (list.getChildCount() == 0) return false;
+        for (int i = 0; i < list.getChildCount(); i++) {
+            View row = list.getChildAt(i);
+            View preview = row.findViewById(me.pompel.elauncher.R.id.kind_preview);
+            if (preview == null) return false;
+        }
+        return true;
+    }
+
+    public boolean boardFitsSystemWindows() {
+        boolean[] fits = new boolean[1];
+        dashboardScenario.onActivity(a ->
+                fits[0] = a.findViewById(me.pompel.elauncher.R.id.board_root).getFitsSystemWindows());
+        return fits[0];
+    }
+
+    public boolean removeHandleVisibleAndDark(int position) {
+        View handle = dashboard().boardRowAt(position).findViewWithTag(R.id.remove_handle);
+        if (handle == null || handle.getVisibility() != View.VISIBLE) return false;
+        // the badge must float: dark background + elevation shadow above the
+        // widget (ink on ink with no lift = invisible)
+        return handle.getBackground() != null && handle.getElevation() > 0;
+    }
+
+    private void collectDialogTexts(View view, java.util.Set<String> out) {
+        if (view instanceof TextView) out.add(((TextView) view).getText().toString());
+        if (view instanceof android.view.ViewGroup) {
+            for (int i = 0; i < ((android.view.ViewGroup) view).getChildCount(); i++) {
+                collectDialogTexts(((android.view.ViewGroup) view).getChildAt(i), out);
+            }
+        }
+    }
+
+    public void clickFirstAdderKind() {
+        android.app.Dialog latest =
+                org.robolectric.shadows.ShadowDialog.getLatestDialog();
+        LinearLayout list = latest.findViewById(me.pompel.elauncher.R.id.adder_list);
+        if (list == null || list.getChildCount() == 0) {
+            throw new AssertionError("widget adder popover has no kinds");
+        }
+        list.getChildAt(0).performClick();
+        idle();
+    }
+
+    public void clickAdderKind(String label) {
+        android.app.Dialog latest =
+                org.robolectric.shadows.ShadowDialog.getLatestDialog();
+        LinearLayout list = latest.findViewById(me.pompel.elauncher.R.id.adder_list);
+        for (int i = 0; i < list.getChildCount(); i++) {
+            View row = list.getChildAt(i);
+            TextView title = row.findViewById(me.pompel.elauncher.R.id.kind_title);
+            if (title != null && label.contentEquals(title.getText().toString())) {
+                row.performClick();
+                idle();
+                return;
+            }
+        }
+        throw new AssertionError("no widget kind labeled " + label + " in the adder");
+    }
+
+    /** Completes whatever binding path the adder chose: a direct bind is
+     * already done; a system-picker handoff is fulfilled by binding the
+     * reserved id to the fixture provider, like the real picker would. */
+    public void resolveAdderOutcome() {
+        idle();
+        org.robolectric.shadows.ShadowActivity.IntentForResult req = shadowOf(dashboard()).getNextStartedActivityForResult();
+        if (req == null) return; // direct bind happened, nothing to resolve
+        if (android.appwidget.AppWidgetManager.ACTION_APPWIDGET_PICK.equals(req.intent.getAction())) {
+            int id = req.intent.getIntExtra(android.appwidget.AppWidgetManager.EXTRA_APPWIDGET_ID, -1);
+            shadowOf(widgetManager()).bindAppWidgetId(id, widgetProvider);
+            Intent result = new Intent().putExtra(
+                    android.appwidget.AppWidgetManager.EXTRA_APPWIDGET_ID, id);
+            shadowOf(dashboard()).receiveResult(req.intent, android.app.Activity.RESULT_OK, result);
+        }
+        idle();
+    }
+
+    public void assertSystemPickerStarted() {
+        org.robolectric.shadows.ShadowActivity.IntentForResult req = shadowOf(dashboard()).getNextStartedActivityForResult();
+        if (req == null) throw new AssertionError("no activity started");
+        if (!android.appwidget.AppWidgetManager.ACTION_APPWIDGET_PICK.equals(req.intent.getAction())) {
+            throw new AssertionError("expected the system widget picker, got " + req.intent.getAction());
+        }
+    }
+
+    public boolean rowChildVisible(int position, int childTag) {
+        View handle = dashboard().boardRowAt(position).findViewWithTag(childTag);
+        return handle != null && handle.getVisibility() == View.VISIBLE;
+    }
+
+    public void rowChildPerformClick(int position, int childTag) {
+        View handle = dashboard().boardRowAt(position).findViewWithTag(childTag);
+        if (handle == null) throw new AssertionError("no child tagged " + childTag);
+        handle.performClick();
+        idle();
+    }
+
+    public void dismissAdder() {
+        dashboard().closeAdder();
+        idle();
+    }
+
+    public void seedTwoWidgets() {
+        shadowOf(widgetManager()).bindAppWidgetId(11, widgetProvider);
+        shadowOf(widgetManager()).bindAppWidgetId(12, widgetProvider);
+        seedBoardIds(11, 12);
+        restartDashboard();
+    }
+
+    public String storedBoardIdsAsString() {
+        StringBuilder sb = new StringBuilder();
+        for (int id : storedBoardIds()) {
+            if (sb.length() > 0) sb.append(',');
+            sb.append(id);
+        }
+        return sb.toString();
+    }
+
+    public int storedHeight(int position) {
+        int id = storedBoardIds().get(position);
+        return new me.pompel.elauncher.BoardStore(
+                appContext().getSharedPreferences(me.pompel.elauncher.BoardStore.PREFS_FILE,
+                        Context.MODE_PRIVATE)).size(id);
+    }
+
+    public int renderedRowHeightDp(int position) {
+        int[] h = new int[1];
+        dashboardScenario.onActivity(a -> {
+            android.view.ViewGroup row = (android.view.ViewGroup) a
+                    .findViewById(me.pompel.elauncher.R.id.board);
+            // the container's child row: its widget child height, in dp
+            float density = a.getResources().getDisplayMetrics().density;
+            View child = row.getChildAt(0);
+            h[0] = child == null ? -1 : Math.round(child.getHeight() / density);
+        });
+        return h[0];
+    }
+
+    /** Seeds the board store directly (ids only, no binding) — for stale-widget scenarios. */
+    public void seedBoardIds(int... ids) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < ids.length; i++) {
+            if (i > 0) sb.append(',');
+            sb.append(ids[i]);
+        }
+        appContext().getSharedPreferences(me.pompel.elauncher.BoardStore.PREFS_FILE, Context.MODE_PRIVATE)
+                .edit().putString(me.pompel.elauncher.BoardStore.KEY_IDS, sb.toString()).commit();
+    }
+
+    public List<Integer> storedBoardIds() {
+        return new me.pompel.elauncher.BoardStore(
+                appContext().getSharedPreferences(me.pompel.elauncher.BoardStore.PREFS_FILE, Context.MODE_PRIVATE))
+                .ids();
+    }
+
+    public int rowCount() {
+        return dashboard().rowCount();
+    }
+
+    public boolean emptyHintVisible() {
+        boolean[] visible = new boolean[1];
+        dashboardScenario.onActivity(a ->
+                visible[0] = a.findViewById(R.id.empty_hint).getVisibility() == View.VISIBLE);
+        return visible[0];
+    }
+
+    public void longPressBoardRow(int row) {
+        dashboardScenario.onActivity(a ->
+                a.boardRowAt(row).performLongClick());
+        idle();
+    }
+
+    /** Real-touch path: dispatches DOWN + hold + UP on the row's overlay,
+     * which must enter edit mode after HOLD_TO_EDIT_MS. */
+    public void holdBoardRow(int row) {
+        dashboardScenario.onActivity(a -> {
+            View overlay = a.boardRowAt(row).findViewWithTag(R.id.hold_overlay);
+            if (overlay == null) throw new AssertionError("no hold overlay on the row");
+            long now = android.os.SystemClock.uptimeMillis();
+            android.view.MotionEvent down = android.view.MotionEvent.obtain(
+                    now, now, android.view.MotionEvent.ACTION_DOWN, 10, 10, 0);
+            overlay.dispatchTouchEvent(down);
+            down.recycle();
+        });
+        org.robolectric.Shadows.shadowOf(Looper.getMainLooper())
+                .idleFor(700 + 50, java.util.concurrent.TimeUnit.MILLISECONDS);
+        dashboardScenario.onActivity(a -> {
+            View overlay = a.boardRowAt(row).findViewWithTag(R.id.hold_overlay);
+            long now = android.os.SystemClock.uptimeMillis();
+            android.view.MotionEvent up = android.view.MotionEvent.obtain(
+                    now, now, android.view.MotionEvent.ACTION_UP, 10, 10, 0);
+            overlay.dispatchTouchEvent(up);
+            up.recycle();
+        });
+        idle();
+    }
+
+    /** True when a MAIN/LAUNCHER entry with the given label is queryable, i.e. the
+     * launcher lists it (Robolectric merges the real manifest). */
+    public boolean hasLauncherEntry(String label) {
+        Intent main = new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER);
+        android.content.pm.PackageManager pm = appContext().getPackageManager();
+        for (android.content.pm.ResolveInfo ri : pm.queryIntentActivities(main, 0)) {
+            if (label.contentEquals(ri.loadLabel(pm))) return true;
+        }
+        return false;
     }
 }

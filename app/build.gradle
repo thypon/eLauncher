@@ -57,6 +57,12 @@ android {
     testOptions {
         unitTests {
             includeAndroidResources = true
+            all {
+                // Robolectric sandboxes share the androidx statics across test
+                // classes (AppCompatDelegate active-delegate leaks); a fresh
+                // JVM per test class keeps them isolated
+                it.forkEvery = 1
+            }
         }
     }
 }

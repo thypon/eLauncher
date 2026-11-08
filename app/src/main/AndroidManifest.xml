@@ -46,6 +46,19 @@
                 android:value="" />
         </activity>
 
+        <activity
+            android:name=".DashboardActivity"
+            android:exported="true"
+            android:icon="@mipmap/ic_eboard"
+            android:label="eBoard"
+            android:roundIcon="@mipmap/ic_eboard_round" >
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
         <receiver android:name=".UnlockReceiver"
             android:exported="false">
             <intent-filter>
