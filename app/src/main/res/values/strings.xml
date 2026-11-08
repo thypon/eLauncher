@@ -18,6 +18,7 @@
     <string name="gesture_picker_right_title">Right Gesture App</string>
     <string name="gesture_picker_reset">Reset to Default</string>
     <string name="gesture_picker_cancel">Cancel</string>
+    <string name="gesture_picker_icon_desc">App icon</string>
     <string name="eboard_name">eBoard</string>
     <!-- fixture text for the widget-kind description (see LauncherWorld.installWidgetProvider) -->
     <string name="eboard_kind_sample">A digital clock widget</string>
