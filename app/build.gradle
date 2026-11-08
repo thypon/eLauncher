@@ -82,6 +82,11 @@ def offlineExecFile = layout.buildDirectory.file('jacoco/testDebugUnitTest.exec'
 
 tasks.register('instrumentDebugClasses', DefaultTask) {
     dependsOn tasks.named('compileDebugJavaWithJavac')
+    // Without declared inputs Gradle considers this task UP-TO-DATE whenever the
+    // output dir exists, so stale pre-instrumented classes keep feeding the test
+    // classpath after any main-source change (CI never notices: fresh build dir).
+    inputs.dir(layout.buildDirectory.dir('intermediates/javac/debug/compileDebugJavaWithJavac/classes'))
+            .withPathSensitivity(PathSensitivity.RELATIVE)
     outputs.dir(offlineInstrDir)
     doLast {
         def outDir = offlineInstrDir.get().asFile
