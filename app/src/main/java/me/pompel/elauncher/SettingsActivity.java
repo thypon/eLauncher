@@ -31,6 +31,18 @@ public class SettingsActivity extends AppCompatActivity {
         }
 
         gestureDetector = new GestureDetector(this, new GestureListener());
+
+        applyOrientationLock(this,
+                androidx.preference.PreferenceManager.getDefaultSharedPreferences(this)
+                        .getBoolean("lock_portrait_preference", true));
+    }
+
+    /** Applies the orientation lock: portrait unless the lock is off
+     * (then the orientation follows the system). */
+    static void applyOrientationLock(android.app.Activity activity, boolean lockPortrait) {
+        activity.setRequestedOrientation(lockPortrait
+                ? android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+                : android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED);
     }
 
     private class GestureListener extends GestureDetector.SimpleOnGestureListener {
@@ -94,6 +106,16 @@ public class SettingsActivity extends AppCompatActivity {
                             android.content.res.Configuration.UI_MODE_NIGHT_YES;
                     darkModePreference.setChecked(systemDarkMode);
                 }
+            }
+
+            // Re-apply the lock immediately when the switch is toggled
+            androidx.preference.SwitchPreferenceCompat lockPortraitPreference =
+                findPreference("lock_portrait_preference");
+            if (lockPortraitPreference != null) {
+                lockPortraitPreference.setOnPreferenceChangeListener((preference, newValue) -> {
+                    applyOrientationLock(requireActivity(), Boolean.TRUE.equals(newValue));
+                    return true;
+                });
             }
         }
     }

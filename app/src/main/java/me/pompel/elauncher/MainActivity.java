@@ -16,6 +16,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
+import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.content.res.Configuration;
@@ -61,6 +62,7 @@ import java.util.TreeMap;
 public class MainActivity extends AppCompatActivity {
     private static final String NUMBER_OF_APPS = "number_of_apps_preference";
     private static final String DARK_MODE = "dark_mode_preference";
+    private static final String LOCK_PORTRAIT = "lock_portrait_preference";
 
     private ArrayList<App> appList;
     private ArrayList<SpannableString> appNames;
@@ -242,6 +244,8 @@ public class MainActivity extends AppCompatActivity {
         BigmeShims.registerUnlockReceiver(this);
 
         prefs = PreferenceManager.getDefaultSharedPreferences(this);
+
+        applyOrientationLock();
 
         // Get system dark mode as default
         boolean systemDarkMode = (getResources().getConfiguration().uiMode & 
@@ -439,8 +443,18 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
+        applyOrientationLock();
         BigmeShims.queryLauncherProvider(this);
         homeUpdateUsage();
+    }
+
+    /** Applies the orientation lock: portrait unless the user turned the lock off
+     * (then the orientation follows the system). */
+    private void applyOrientationLock() {
+        boolean lockPortrait = prefs.getBoolean(LOCK_PORTRAIT, true);
+        setRequestedOrientation(lockPortrait
+                ? ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+                : ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED);
     }
 
     private boolean canMakePhoneCall() {

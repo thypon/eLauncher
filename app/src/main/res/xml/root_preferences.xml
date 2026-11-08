@@ -16,4 +16,9 @@
         app:key="dark_mode_preference"
         app:title="@string/dark_mode_title"
         app:summary="@string/dark_mode_summary" />
+    <SwitchPreferenceCompat
+        app:key="lock_portrait_preference"
+        app:title="@string/lock_portrait_title"
+        app:summary="@string/lock_portrait_summary"
+        app:defaultValue="true" />
 </PreferenceScreen>
