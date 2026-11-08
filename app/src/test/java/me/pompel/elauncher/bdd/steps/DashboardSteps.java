@@ -172,6 +172,12 @@ public class DashboardSteps {
                 world.adderRowsShowBigPreview());
     }
 
+    @Then("the widget view has a transparent background")
+    public void widgetTransparentBackground() {
+        assertTrue("the widget view must have a transparent background (no system white container)",
+                world.widgetTransparentBackground(0));
+    }
+
     @Then("the board stays clear of the system status bar")
     public void boardStaysClearOfStatusBar() {
         assertTrue("the board must leave room for the system header",
@@ -214,6 +220,22 @@ public class DashboardSteps {
     @When("I tap the widget")
     public void tapWidget() {
         world.tapWidget();
+    }
+
+    @When("I hold the empty board space")
+    public void holdEmptyBoardSpace() {
+        world.holdBoardEmptyOpenAdder();
+    }
+
+    @Then("the widget adder popover opens again")
+    public void widgetAdderPopoverOpensAgain() {
+        assertTrue("expected the widget adder popover to open again",
+                world.adderOpen());
+    }
+
+    @When("I remove the only widget row")
+    public void removeOnlyWidgetRow() {
+        world.removeAt(0);
     }
 
     @Then("the widget has no blocking overlay")

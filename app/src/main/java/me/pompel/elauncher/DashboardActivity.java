@@ -219,6 +219,12 @@ public class DashboardActivity extends AppCompatActivity {
                 @NonNull MotionEvent e2, float velocityX, float velocityY) {
             float xDiff = e2.getX() - e1.getX();
             float yDiff = e2.getY() - e1.getY();
+            // swiping up returns to the launcher (the "go back" gesture)
+            if (Math.abs(yDiff) > Math.abs(xDiff) && yDiff < 0
+                    && Math.abs(velocityY) > 100) {
+                exitToLauncher(0);
+                return true;
+            }
             if (entryDirection == 0 || editMode
                     || Math.abs(xDiff) <= Math.abs(yDiff)
                     || Math.abs(xDiff) <= 100 || Math.abs(velocityX) <= 100) {
@@ -277,14 +283,14 @@ public class DashboardActivity extends AppCompatActivity {
 
     // ---- edit mode -------------------------------------------------------------------------
 
-    void enterEditMode() {
+    public void enterEditMode() {
         editMode = true;
         adapter.setEditMode(true);
         updateUiState(); // no notifyDataSetChanged: the touch that triggered the
                          // edit must not detach the row mid-gesture
     }
 
-    void exitEditMode() {
+    public void exitEditMode() {
         if (!editMode) return;
         editMode = false;
         adapter.setEditMode(false);
@@ -347,7 +353,9 @@ public class DashboardActivity extends AppCompatActivity {
 
     /** Opens the half-screen bottom popover listing every provider's widget kind. */
     void openAdder() {
-        if (adderDialog != null) return;
+        // never reuse a stale dialog: a missed dismiss used to block every
+        // later open (button and hold-on-empty-space) until a relaunch
+        closeAdder();
         View content = getLayoutInflater().inflate(R.layout.widget_adder, null);
         LinearLayout list = content.findViewById(R.id.adder_list);
         DisplayMetrics dm = getResources().getDisplayMetrics();
@@ -497,6 +505,9 @@ public class DashboardActivity extends AppCompatActivity {
         int wDp = columnWidthDp();
 
         AppWidgetHostView widget = host.createView(this, id, info);
+        // API 31+ wraps widgets in a system white rounded container; the board
+        // wants the widget content itself, transparent
+        widget.setBackgroundResource(0);
         widget.updateAppWidgetSize(new Bundle(), wDp, heightDp, wDp, heightDp);
         widget.setLayoutParams(new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, (int) dp(heightDp)));

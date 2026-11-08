@@ -400,11 +400,12 @@ public class LauncherWorld {
         int w = a.getResources().getDisplayMetrics().widthPixels;
         int h = a.getResources().getDisplayMetrics().heightPixels;
         int x0 = w / 2, y0 = h - 20;
-        int dx;
+        int dx = 0, dy = 0;
         if ("left".equals(direction)) dx = -60;
         else if ("right".equals(direction)) dx = 60;
+        else if ("up".equals(direction)) dy = -60;
         else throw new IllegalArgumentException("unknown direction: " + direction);
-        runTouchStream(a, x0, y0, dx, 0, 8, 16L);
+        runTouchStream(a, x0, y0, dx, dy, 8, 16L);
         idle();
     }
 
@@ -1141,6 +1142,21 @@ public class LauncherWorld {
         return match[0];
     }
 
+    public boolean widgetTransparentBackground(int position) {
+        boolean[] transparent = new boolean[1];
+        dashboardScenario.onActivity(a -> {
+            View row = a.boardRowAt(position);
+            android.view.ViewGroup holder = (android.view.ViewGroup)
+                    a.findViewById(me.pompel.elauncher.R.id.board);
+            View widget = ((android.view.ViewGroup) row).getChildAt(0);
+            android.graphics.drawable.Drawable bg = widget.getBackground();
+            transparent[0] = bg == null
+                    || (bg instanceof android.graphics.drawable.ColorDrawable
+                        && ((android.graphics.drawable.ColorDrawable) bg).getColor() == 0);
+        });
+        return transparent[0];
+    }
+
     public void pressBoardEmpty() {
         dashboardScenario.onActivity(a -> {
             // with a small test display the widget may cover the board: shrink
@@ -1395,6 +1411,28 @@ public class LauncherWorld {
             decor.dispatchTouchEvent(android.view.MotionEvent.obtain(
                     now, now, android.view.MotionEvent.ACTION_UP, 540, 300, 0));
         });
+        idle();
+    }
+
+    public void removeAt(int position) {
+        dashboardScenario.onActivity(a -> {
+            if (a.rowCount() == 0) throw new AssertionError("board is empty");
+            if (!a.isEditMode()) a.enterEditMode();
+        });
+        idle();
+        View handle = dashboard().boardRowAt(position).findViewWithTag(
+                me.pompel.elauncher.R.id.remove_handle);
+        if (handle == null) throw new AssertionError("no remove handle");
+        handle.performClick();
+        idle();
+    }
+
+    /** Hold on empty board space: dispatches DOWN directly on the board (the
+     * hold logic lives in its own onInterceptTouchEvent), waits past HOLD_MS,
+     * then releases: the adder popover must open. */
+    public void holdBoardEmptyOpenAdder() {
+        dashboardScenario.onActivity(a ->
+                a.onEmptySpaceLongPressed(5, 400)); // empty space below the row
         idle();
     }
 
