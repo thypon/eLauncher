@@ -19,7 +19,40 @@ Feature: eBoard edit mode and widget adder
     Then the widget adder popover opens
     And it covers half of the screen, anchored at the bottom
     And it lists the "Digital" widget kind "A digital clock widget"
-    And each kind row shows a widget preview
+    And each kind row shows a big preview with a small description
+
+  Scenario: Pressing empty space exits edit mode
+    When I add a widget from the widget adder
+    And I long press the widget row
+    Then the widget shows a remove handle
+    And I press the empty board space
+    Then edit mode is off
+    And the widget shows no handles
+
+  Scenario: Widget taps are not blocked
+    When I add a widget from the widget adder
+    And I tap the widget
+    Then edit mode is off
+    And a widget row is on the board
+
+  Scenario: The board follows the theme background
+    Given the dark mode preference is on
+    And the eBoard is restarted
+    Then the board background is the dark theme background
+
+  Scenario: Widgets lay out in two columns
+    When I add a widget from the widget adder
+    And I add a widget from the widget adder
+    Then the board shows widgets in two columns
+
+  Scenario: Without binding permission the system confirmation appears
+    Given binding widgets is not allowed
+    When I tap the add widget button
+    And the widget adder popover opens
+    And I select the "Digital" widget kind
+    Then the system bind confirmation opens
+    And the widget binding is confirmed
+    Then a widget row is on the board
 
   Scenario: The board leaves room for the system header
     Then the board stays clear of the system status bar
