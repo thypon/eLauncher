@@ -82,6 +82,16 @@ public class GestureSteps {
         world.pressBack();
     }
 
+    @When("I fling inward from the {word} screen edge")
+    public void flingInwardFromEdge(String side) {
+        world.edgeFling(side, true);
+    }
+
+    @When("I fling outward from the {word} screen edge")
+    public void flingOutwardFromEdge(String side) {
+        world.edgeFling(side, false);
+    }
+
     @When("I press back")
     public void pressBack() {
         world.pressBack();

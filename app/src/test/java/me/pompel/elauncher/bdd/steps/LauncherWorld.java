@@ -407,6 +407,24 @@ public class LauncherWorld {
         idle();
     }
 
+    /** Fast horizontal fling starting inside the 50dp edge zone. Inward = toward the
+     * screen centre (the direction that can either mark a back gesture or fling);
+     * outward = toward/past the screen edge. Velocity ≈60px per 16ms — past the
+     * fling thresholds — so GestureDetector.onFling fires like a real quick swipe. */
+    public void edgeFling(String side, boolean inward) {
+        scenario.onActivity(a -> {
+            int w = a.getResources().getDisplayMetrics().widthPixels;
+            int h = a.getResources().getDisplayMetrics().heightPixels;
+            boolean leftEdge = "left".equals(side);
+            int x = leftEdge ? 10 : w - 10;
+            int dx;
+            if (inward) dx = leftEdge ? 60 : -60;
+            else dx = leftEdge ? -60 : 60;
+            runTouchStream(a, x, h - 20, dx, 0, 8, 16L);
+        });
+        idle();
+    }
+
     /** Slow inward horizontal swipe from a screen edge (30px per 400ms ≈ 75px/s — under the
      * fling velocity threshold) so only the back-gesture state machine marks the touch. */
     public void edgeSwipe(String side) {
