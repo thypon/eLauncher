@@ -73,8 +73,8 @@ android {
 // fixes it. Gate (min 80% verification) is enforced in a later iteration.
 configurations { jacocoAntOffline; jacocoAgentRuntime }
 dependencies {
-    jacocoAntOffline 'org.jacoco:org.jacoco.ant:0.8.15'
-    jacocoAgentRuntime 'org.jacoco:org.jacoco.agent:0.8.15:runtime'
+    jacocoAntOffline 'org.jacoco:org.jacoco.ant:0.8.16'
+    jacocoAgentRuntime 'org.jacoco:org.jacoco.agent:0.8.16:runtime'
 }
 
 def coverageExclusions = [
@@ -174,7 +174,7 @@ dependencies {
 
     // JVM unit-test stack: Robolectric + Cucumber-JVM (BDD)
     testImplementation 'junit:junit:4.13.2'
-    testImplementation 'org.robolectric:robolectric:4.14.1'
+    testImplementation 'org.robolectric:robolectric:4.17'
     testImplementation 'androidx.test:core:1.6.1'
     testImplementation 'androidx.test.ext:junit:1.2.1'
     testImplementation 'androidx.test.espresso:espresso-core:3.6.1'

@@ -9,6 +9,7 @@ import io.cucumber.java.en.Then;
 import io.cucumber.java.en.When;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
 import static org.robolectric.Shadows.shadowOf;
@@ -165,10 +166,10 @@ public class DashboardSteps {
         world.clickFirstAdderKind();
     }
 
-    @Then("each kind row shows a widget preview")
+    @Then("each kind row shows a big preview with a small description")
     public void adderRowsShowPreview() {
-        assertTrue("each adder kind row must include a widget preview",
-                world.adderRowsShowPreview());
+        assertTrue("each adder kind row must include a big preview with a small description",
+                world.adderRowsShowBigPreview());
     }
 
     @Then("the board stays clear of the system status bar")
@@ -181,6 +182,64 @@ public class DashboardSteps {
     public void removeHandleClearlyVisible() {
         assertTrue("the (x) handle must draw on a dark badge (visible on any widget)",
                 world.removeHandleVisibleAndDark(0));
+    }
+
+    @Given("the dark mode preference is on")
+    public void darkModePreferenceOn() {
+        world.setDarkModePreference(true);
+    }
+
+    @Then("the board background is the dark theme background")
+    public void boardBackgroundIsThemeBackground() {
+        assertTrue("board background must follow the theme background",
+                world.boardBackgroundIsThemeBackground());
+    }
+
+    @When("I press the empty board space")
+    public void pressEmptyBoardSpace() {
+        world.pressBoardEmpty();
+    }
+
+    @Then("edit mode is off")
+    public void editModeOff() {
+        assertFalse("edit mode must be off", world.dashboard().isEditMode());
+    }
+
+    @Then("the widget shows no handles")
+    public void widgetShowsNoHandles() {
+        assertFalse("handles must be hidden outside edit mode",
+                world.rowChildVisible(0, me.pompel.elauncher.R.id.remove_handle));
+    }
+
+    @When("I tap the widget")
+    public void tapWidget() {
+        world.tapWidget();
+    }
+
+    @Then("the widget has no blocking overlay")
+    public void widgetHasNoBlockingOverlay() {
+        assertTrue("the widget must not have a blocking overlay",
+                world.dashboard().boardRowAt(0).findViewWithTag(me.pompel.elauncher.R.id.hold_overlay) == null);
+    }
+
+    @Then("the board shows widgets in two columns")
+    public void boardShowsTwoColumns() {
+        assertEquals(2, world.dashboard().gridColumns());
+    }
+
+    @Given("binding widgets is not allowed")
+    public void bindingWidgetsNotAllowed() {
+        world.allowWidgetBinding(false);
+    }
+
+    @Then("the system bind confirmation opens")
+    public void systemBindConfirmationOpens() {
+        world.assertSystemBindConfirmationStarted();
+    }
+
+    @Then("the widget binding is confirmed")
+    public void widgetBindingConfirmed() {
+        world.confirmSystemBinding();
     }
 
     @When("I select the {string} widget kind")
@@ -206,6 +265,9 @@ public class DashboardSteps {
 
     @Then("the widget shows a remove handle")
     public void removeHandleVisible() {
+        System.out.println("eBoardDBG: isEditMode=" + world.dashboard().isEditMode()
+                + " rows=" + world.rowCount()
+                + " handle=" + world.dashboard().boardRowAt(0).findViewWithTag(me.pompel.elauncher.R.id.remove_handle));
         assertTrue("expected an (x) remove handle in edit mode",
                 world.rowChildVisible(0, me.pompel.elauncher.R.id.remove_handle));
     }

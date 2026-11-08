@@ -214,7 +214,7 @@ public class GestureSteps {
 
     @Then("the launched activity uses the default system animation")
     public void launchedActivityUsesDefaultAnimation() {
-        world.await(() -> org.robolectric.shadows.ShadowApplication.getInstance().getNextStartedActivity() != null);
+        world.await(() -> org.robolectric.Shadows.shadowOf(org.robolectric.RuntimeEnvironment.getApplication()).getNextStartedActivity() != null);
         MainActivity[] ref = new MainActivity[1];
         world.scenario.onActivity(a -> ref[0] = a);
         org.robolectric.shadows.ShadowActivity shadow = org.robolectric.Shadows.shadowOf(ref[0]);

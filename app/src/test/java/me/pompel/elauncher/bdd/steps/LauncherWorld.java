@@ -22,7 +22,7 @@ import me.pompel.elauncher.MainActivity;
 import me.pompel.elauncher.SettingsActivity;
 import me.pompel.elauncher.R;
 import me.pompel.elauncher.recyclerAdapter;
-import org.robolectric.shadows.ShadowApplication;
+import org.robolectric.RuntimeEnvironment;
 
 import java.lang.reflect.Field;
 import java.util.ArrayList;
@@ -902,7 +902,7 @@ public class LauncherWorld {
     }
 
     public Intent nextStartedActivity() {
-        return ShadowApplication.getInstance().getNextStartedActivity();
+        return org.robolectric.Shadows.shadowOf(RuntimeEnvironment.getApplication()).getNextStartedActivity();
     }
 
     /** Test-only read access to the adapter's currently filtered app list. */
@@ -1094,6 +1094,96 @@ public class LauncherWorld {
         return true;
     }
 
+    public boolean adderRowsShowBigPreview() {
+        android.app.Dialog latest =
+                org.robolectric.shadows.ShadowDialog.getLatestDialog();
+        LinearLayout list = latest.findViewById(me.pompel.elauncher.R.id.adder_list);
+        if (list.getChildCount() == 0) return false;
+        float density = appContext().getResources().getDisplayMetrics().density;
+        for (int i = 0; i < list.getChildCount(); i++) {
+            View row = list.getChildAt(i);
+            View preview = row.findViewById(me.pompel.elauncher.R.id.kind_preview);
+            TextView sub = row.findViewById(me.pompel.elauncher.R.id.kind_sub);
+            TextView title = row.findViewById(me.pompel.elauncher.R.id.kind_title);
+            if (preview == null || sub == null || title == null) return false;
+            // big preview slot and a description smaller than the title
+            if (preview.getWidth() < 100 * density) return false;
+            if (sub.getTextSize() >= title.getTextSize()) return false;
+        }
+        return true;
+    }
+
+    public void setDarkModePreference(boolean on) {
+        android.preference.PreferenceManager.getDefaultSharedPreferences(appContext())
+                .edit().putBoolean("dark_mode_preference", on).commit();
+    }
+
+    public boolean boardBackgroundIsThemeBackground() {
+        boolean[] match = new boolean[1];
+        dashboardScenario.onActivity(a -> {
+            android.view.View root = a.findViewById(me.pompel.elauncher.R.id.board_root);
+            android.util.TypedValue tv = new android.util.TypedValue();
+            a.getTheme().resolveAttribute(android.R.attr.colorBackground, tv, true);
+            int expected = tv.data;
+            android.graphics.drawable.Drawable bg = root.getBackground();
+            if (bg instanceof android.graphics.drawable.ColorDrawable) {
+                match[0] = ((android.graphics.drawable.ColorDrawable) bg).getColor() == expected;
+            } else {
+                // layered/rounded backgrounds: sample the center pixel color
+                android.graphics.Bitmap bmp = android.graphics.Bitmap.createBitmap(
+                        2, 2, android.graphics.Bitmap.Config.ARGB_8888);
+                android.graphics.Canvas canvas = new android.graphics.Canvas(bmp);
+                bg.setBounds(0, 0, 2, 2);
+                bg.draw(canvas);
+                match[0] = bmp.getPixel(1, 1) == expected;
+            }
+        });
+        return match[0];
+    }
+
+    public void pressBoardEmpty() {
+        dashboardScenario.onActivity(a -> {
+            // with a small test display the widget may cover the board: shrink
+            // the first row to its minimum so empty space exists below it
+            if (a.rowCount() > 0) a.applyRowHeight(0,
+                    me.pompel.elauncher.DashboardActivity.MIN_HEIGHT_DP);
+            // dispatch directly on the board: a ViewGroup.dispatchTouchEvent
+            // with DOWN always runs its own onInterceptTouchEvent, where the
+            // hold/exit logic lives
+            androidx.recyclerview.widget.RecyclerView board =
+                    a.findViewById(me.pompel.elauncher.R.id.board);
+            long now = android.os.SystemClock.uptimeMillis();
+            board.dispatchTouchEvent(android.view.MotionEvent.obtain(
+                    now, now, android.view.MotionEvent.ACTION_DOWN, 5, 400, 0));
+            board.dispatchTouchEvent(android.view.MotionEvent.obtain(
+                    now, now, android.view.MotionEvent.ACTION_UP, 5, 400, 0));
+        });
+        idle();
+    }
+
+    private org.robolectric.shadows.ShadowActivity.IntentForResult lastBindRequest;
+
+    public void assertSystemBindConfirmationStarted() {
+        lastBindRequest = shadowOf(dashboard()).getNextStartedActivityForResult();
+        if (lastBindRequest == null) throw new AssertionError("no activity started");
+        if (!android.appwidget.AppWidgetManager.ACTION_APPWIDGET_BIND.equals(lastBindRequest.intent.getAction())) {
+            throw new AssertionError("expected the system bind confirmation, got "
+                    + lastBindRequest.intent.getAction());
+        }
+    }
+
+    public void confirmSystemBinding() {
+        if (lastBindRequest == null) throw new AssertionError("no bind request to confirm");
+        int id = lastBindRequest.intent.getIntExtra(
+                android.appwidget.AppWidgetManager.EXTRA_APPWIDGET_ID, -1);
+        shadowOf(widgetManager()).bindAppWidgetId(id, widgetProvider);
+        Intent result = new Intent().putExtra(
+                android.appwidget.AppWidgetManager.EXTRA_APPWIDGET_ID, id);
+        shadowOf(dashboard()).receiveResult(lastBindRequest.intent,
+                android.app.Activity.RESULT_OK, result);
+        idle();
+    }
+
     public boolean boardFitsSystemWindows() {
         boolean[] fits = new boolean[1];
         dashboardScenario.onActivity(a ->
@@ -1146,14 +1236,18 @@ public class LauncherWorld {
     }
 
     /** Completes whatever binding path the adder chose: a direct bind is
-     * already done; a system-picker handoff is fulfilled by binding the
-     * reserved id to the fixture provider, like the real picker would. */
+     * already done; a system handoff (bind confirmation or picker) is
+     * fulfilled by binding the reserved id to the fixture provider, like the
+     * real system dialog would. */
     public void resolveAdderOutcome() {
         idle();
-        org.robolectric.shadows.ShadowActivity.IntentForResult req = shadowOf(dashboard()).getNextStartedActivityForResult();
+        org.robolectric.shadows.ShadowActivity.IntentForResult req =
+                shadowOf(dashboard()).getNextStartedActivityForResult();
         if (req == null) return; // direct bind happened, nothing to resolve
-        if (android.appwidget.AppWidgetManager.ACTION_APPWIDGET_PICK.equals(req.intent.getAction())) {
-            int id = req.intent.getIntExtra(android.appwidget.AppWidgetManager.EXTRA_APPWIDGET_ID, -1);
+        String action = req.intent.getAction();
+        int id = req.intent.getIntExtra(android.appwidget.AppWidgetManager.EXTRA_APPWIDGET_ID, -1);
+        if (android.appwidget.AppWidgetManager.ACTION_APPWIDGET_PICK.equals(action)
+                || android.appwidget.AppWidgetManager.ACTION_APPWIDGET_BIND.equals(action)) {
             shadowOf(widgetManager()).bindAppWidgetId(id, widgetProvider);
             Intent result = new Intent().putExtra(
                     android.appwidget.AppWidgetManager.EXTRA_APPWIDGET_ID, id);
@@ -1257,33 +1351,53 @@ public class LauncherWorld {
         idle();
     }
 
-    /** Real-touch path: dispatches DOWN + hold + UP on the row's overlay,
-     * which must enter edit mode after HOLD_TO_EDIT_MS. */
+    /** Real-touch path: dispatches DOWN + hold + UP directly on the row's
+     * hold proxy (the board-level touch chain was already validated with the
+     * popover scenarios): the proxy must enter edit mode after HOLD_MS. */
     public void holdBoardRow(int row) {
         dashboardScenario.onActivity(a -> {
-            View overlay = a.boardRowAt(row).findViewWithTag(R.id.hold_overlay);
-            if (overlay == null) throw new AssertionError("no hold overlay on the row");
+            View proxy = a.boardRowAt(row).findViewWithTag(R.id.hold_overlay);
+            if (proxy == null) throw new AssertionError("no hold proxy on the row");
             long now = android.os.SystemClock.uptimeMillis();
-            android.view.MotionEvent down = android.view.MotionEvent.obtain(
-                    now, now, android.view.MotionEvent.ACTION_DOWN, 10, 10, 0);
-            overlay.dispatchTouchEvent(down);
-            down.recycle();
+            proxy.dispatchTouchEvent(android.view.MotionEvent.obtain(
+                    now, now, android.view.MotionEvent.ACTION_DOWN, 10, 10, 0));
         });
         org.robolectric.Shadows.shadowOf(Looper.getMainLooper())
-                .idleFor(700 + 50, java.util.concurrent.TimeUnit.MILLISECONDS);
+                .idleFor(700 + 100, java.util.concurrent.TimeUnit.MILLISECONDS);
         dashboardScenario.onActivity(a -> {
-            View overlay = a.boardRowAt(row).findViewWithTag(R.id.hold_overlay);
+            View proxy = a.boardRowAt(row).findViewWithTag(R.id.hold_overlay);
             long now = android.os.SystemClock.uptimeMillis();
-            android.view.MotionEvent up = android.view.MotionEvent.obtain(
-                    now, now, android.view.MotionEvent.ACTION_UP, 10, 10, 0);
-            overlay.dispatchTouchEvent(up);
-            up.recycle();
+            proxy.dispatchTouchEvent(android.view.MotionEvent.obtain(
+                    now, now, android.view.MotionEvent.ACTION_UP, 10, 10, 0));
         });
         idle();
     }
 
     /** True when a MAIN/LAUNCHER entry with the given label is queryable, i.e. the
      * launcher lists it (Robolectric merges the real manifest). */
+    public void tapWidget() {
+        dashboardScenario.onActivity(a -> {
+            // force a layout pass, then dispatch a full tap through the decor:
+            // it reaches the row's proxy overlay and is forwarded to the widget
+            androidx.recyclerview.widget.RecyclerView board =
+                    a.findViewById(me.pompel.elauncher.R.id.board);
+            View parent = (View) board.getParent();
+            int w = Math.max(1, parent.getWidth());
+            int h = Math.max(1, parent.getHeight());
+            board.measure(
+                    View.MeasureSpec.makeMeasureSpec(w, View.MeasureSpec.EXACTLY),
+                    View.MeasureSpec.makeMeasureSpec(h, View.MeasureSpec.EXACTLY));
+            board.layout(0, 0, w, h);
+            View decor = a.getWindow().getDecorView();
+            long now = android.os.SystemClock.uptimeMillis();
+            decor.dispatchTouchEvent(android.view.MotionEvent.obtain(
+                    now, now, android.view.MotionEvent.ACTION_DOWN, 540, 300, 0));
+            decor.dispatchTouchEvent(android.view.MotionEvent.obtain(
+                    now, now, android.view.MotionEvent.ACTION_UP, 540, 300, 0));
+        });
+        idle();
+    }
+
     public boolean hasLauncherEntry(String label) {
         Intent main = new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER);
         android.content.pm.PackageManager pm = appContext().getPackageManager();
