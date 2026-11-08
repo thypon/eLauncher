@@ -34,7 +34,7 @@
             android:layout_height="wrap_content"
             android:singleLine="true"
             android:fontFamily="sans-serif-light"
-            android:textSize="25.6sp"
+            android:textSize="26.5sp"
             android:textColor="?attr/colorPrimary"
             android:gravity="center" />
 

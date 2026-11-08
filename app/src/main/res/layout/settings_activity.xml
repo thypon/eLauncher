@@ -20,7 +20,7 @@
         android:gravity="center"
         android:text="@string/settings_title"
         android:textColor="?attr/colorPrimary"
-        android:textSize="25.6sp" />
+        android:textSize="32sp" />
 
     <FrameLayout
         android:id="@+id/settings"

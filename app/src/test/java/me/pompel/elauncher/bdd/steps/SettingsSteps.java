@@ -129,11 +129,16 @@ public class SettingsSteps {
             if (!(view instanceof android.widget.TextView)) return false;
             android.widget.TextView title = (android.widget.TextView) view;
             float density = view.getResources().getDisplayMetrics().density;
-            // launcher text is 32sp; settings text is 20% smaller -> 25.6sp
-            boolean sized = Math.abs(title.getTextSize() - 25.6f * density) < 0.5f;
+            // settings row text is scaled to 26.5sp (launcher text is 32sp);
+            // TextView resolves XML sizes to integer px, so expect the rounded value
+            float expected = Math.round(26.5f * density);
+            boolean sized = Math.abs(title.getTextSize() - expected) < 0.5f;
             boolean centered = (title.getGravity() & android.view.Gravity.HORIZONTAL_GRAVITY_MASK)
                     == android.view.Gravity.CENTER_HORIZONTAL;
-            return sized && centered;
+            if (sized && centered) return true;
+            throw new AssertionError("row title textSize=" + title.getTextSize()
+                    + "px, density=" + density + ", expected~=" + expected
+                    + "px, gravity=" + title.getGravity());
         });
     }
 }
