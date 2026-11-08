@@ -11,6 +11,7 @@ import me.pompel.elauncher.R;
 import me.pompel.elauncher.SettingsActivity;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
@@ -116,6 +117,58 @@ public class GestureSteps {
                 + " action=" + started.getAction(),
                 started.getComponent() != null);
         assertEquals(DashboardActivity.class.getName(), started.getComponent().getClassName());
+    }
+
+    /** Asserts the launcher launched the dashboard and brings it on screen
+     * with the exact recorded intent, preserving the entry direction extra. */
+    @Then("the eBoard dashboard opens on screen")
+    public void eboardDashboardOpensOnScreen() {
+        Intent started = world.nextStartedActivity();
+        assertNotNull("no activity started", started);
+        assertTrue("eBoard intent must target a component, got: " + started
+                + " action=" + started.getAction(),
+                started.getComponent() != null);
+        assertEquals(DashboardActivity.class.getName(), started.getComponent().getClassName());
+        world.launchDashboardWith(started);
+    }
+
+    @Given("the eBoard dashboard is opened directly")
+    public void eboardDashboardOpenedDirectly() {
+        world.startDashboard();
+    }
+
+    @When("I fling {word} on the eBoard dashboard")
+    public void flingOnEboardDashboard(String direction) {
+        world.flingOnDashboard(direction);
+    }
+
+    @When("I press back on the eBoard dashboard")
+    public void pressBackOnEboardDashboard() {
+        world.pressBackOnDashboard();
+    }
+
+    @Then("the eBoard dashboard stays open")
+    public void eboardDashboardStaysOpen() {
+        world.await(() -> world.dashboardScenario != null);
+        assertFalse("dashboard finished unexpectedly", world.dashboard().isFinishing());
+    }
+
+    /** Asserts the board finished with the reverse directional animation:
+     * the board slides out to the side it entered from, the launcher home
+     * returns from the opposite side. */
+    @Then("the eBoard dashboard animates out to the {word}")
+    public void eboardDashboardAnimatesOut(String side) {
+        boolean left = "left".equals(side);
+        int expectedBoardExit = left ? R.anim.slide_out_left : R.anim.slide_out_right;
+        int expectedHomeEnter = left ? R.anim.slide_in_right : R.anim.slide_in_left;
+        DashboardActivity target = world.dashboardFlingTarget;
+        assertNotNull("no dashboard captured before the fling", target);
+        org.robolectric.shadows.ShadowActivity shadow = org.robolectric.Shadows.shadowOf(target);
+        world.await(() -> shadow.getPendingTransitionExitAnimationResourceId() != -1);
+        assertEquals("wrong board exit animation (out to the " + side + ")",
+                expectedBoardExit, shadow.getPendingTransitionExitAnimationResourceId());
+        assertEquals("wrong launcher home return animation",
+                expectedHomeEnter, shadow.getPendingTransitionEnterAnimationResourceId());
     }
 
     @Then("the browser picker opens")
