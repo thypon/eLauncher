@@ -478,6 +478,47 @@ public class LauncherWorld {
         return ref[0];
     }
 
+    /** Requested orientation of the running MainActivity. */
+    public int mainRequestedOrientation() {
+        int[] orientation = new int[1];
+        scenario.onActivity(a -> orientation[0] = a.getRequestedOrientation());
+        return orientation[0];
+    }
+
+    /** Requested orientation of the running SettingsActivity. */
+    public int settingsRequestedOrientation() {
+        int[] orientation = new int[1];
+        settingsScenario.onActivity(a -> orientation[0] = a.getRequestedOrientation());
+        return orientation[0];
+    }
+
+    /** Clicks the Lock Portrait preference in the settings fragment: toggles, persists
+     * and fires its change listener — the same path as tapping the switch row. */
+    public void toggleLockPortraitPreference() {
+        settingsScenario.onActivity(a -> {
+            androidx.preference.SwitchPreferenceCompat pref = lockPortraitPreference(a);
+            pref.performClick();
+        });
+        idle();
+    }
+
+    /** Checked state of the Lock Portrait preference. */
+    public boolean lockPortraitPreferenceChecked() {
+        boolean[] checked = new boolean[1];
+        settingsScenario.onActivity(a -> checked[0] = lockPortraitPreference(a).isChecked());
+        return checked[0];
+    }
+
+    private androidx.preference.SwitchPreferenceCompat lockPortraitPreference(SettingsActivity a) {
+        androidx.preference.PreferenceFragmentCompat fragment =
+                (androidx.preference.PreferenceFragmentCompat)
+                        a.getSupportFragmentManager().findFragmentById(R.id.settings);
+        androidx.preference.SwitchPreferenceCompat pref =
+                fragment == null ? null : fragment.findPreference("lock_portrait_preference");
+        if (pref == null) throw new AssertionError("lock_portrait_preference not found");
+        return pref;
+    }
+
     /** Vertical fling on the settings screen (SettingsActivity restarts the launcher on up-fling). */
     public void flingOnSettings(String direction) {
         settingsScenario.onActivity(a -> {
