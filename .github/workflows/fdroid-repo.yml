@@ -158,7 +158,9 @@ jobs:
             exit 0
           fi
           git commit -q -m "fdroid: ${{ steps.version.outputs.version_name }} (code ${{ steps.version.outputs.version_code }})"
-          git push -q origin fdroid-repo
+          # Orphan branch is rebuilt from scratch each run (prior state restored
+          # from FETCH_HEAD), so every push replaces the ref entirely.
+          git push -q --force origin fdroid-repo
           echo "changed=true" >> "$GITHUB_OUTPUT"
 
       - name: Stage Pages artifact
