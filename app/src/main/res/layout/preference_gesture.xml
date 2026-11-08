@@ -15,7 +15,7 @@
         android:id="@android:id/title"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:textSize="28sp"
+        android:textSize="25.6sp"
         android:fontFamily="sans-serif-light"
         android:textColor="?attr/colorPrimary"
         android:gravity="center" />

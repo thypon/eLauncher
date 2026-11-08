@@ -129,7 +129,8 @@ public class SettingsSteps {
             if (!(view instanceof android.widget.TextView)) return false;
             android.widget.TextView title = (android.widget.TextView) view;
             float density = view.getResources().getDisplayMetrics().density;
-            boolean sized = Math.abs(title.getTextSize() - 28 * density) < 0.5f;
+            // launcher text is 32sp; settings text is 20% smaller -> 25.6sp
+            boolean sized = Math.abs(title.getTextSize() - 25.6f * density) < 0.5f;
             boolean centered = (title.getGravity() & android.view.Gravity.HORIZONTAL_GRAVITY_MASK)
                     == android.view.Gravity.CENTER_HORIZONTAL;
             return sized && centered;

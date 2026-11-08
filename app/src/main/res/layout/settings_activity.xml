@@ -16,10 +16,11 @@
         android:layout_marginTop="24dp"
         android:layout_marginBottom="8dp"
         android:fontFamily="sans-serif-light"
+        android:textStyle="bold"
         android:gravity="center"
         android:text="@string/settings_title"
         android:textColor="?attr/colorPrimary"
-        android:textSize="32sp" />
+        android:textSize="25.6sp" />
 
     <FrameLayout
         android:id="@+id/settings"
