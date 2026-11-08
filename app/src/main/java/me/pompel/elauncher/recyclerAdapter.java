@@ -119,7 +119,10 @@ public class recyclerAdapter extends RecyclerView.Adapter<recyclerAdapter.AppVie
                     }
                 }
 
-                if (!autoLaunched && appListFiltered.size() == 1) listener.onClick(appListFiltered.get(0));
+                // GUARD: auto-launch only for a real query. With an empty query the
+                // filtered list is "all apps"; launching from openAppWithIntent would
+                // clear the search box again and re-enter this filter forever.
+                if (!autoLaunched && charSequence.length() > 0 && appListFiltered.size() == 1) listener.onClick(appListFiltered.get(0));
                 notifyDataSetChanged();
             }
         };

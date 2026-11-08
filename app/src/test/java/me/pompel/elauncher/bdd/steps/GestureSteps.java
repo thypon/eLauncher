@@ -13,6 +13,7 @@ import me.pompel.elauncher.SettingsActivity;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 
 public class GestureSteps {
     private final LauncherWorld world;
