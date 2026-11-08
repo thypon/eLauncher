@@ -15,14 +15,16 @@
         android:id="@android:id/title"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:textSize="16sp"
+        android:textSize="26.5sp"
+        android:fontFamily="sans-serif-light"
+        android:textColor="?attr/colorPrimary"
         android:gravity="center" />
 
     <TextView
         android:id="@android:id/summary"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:textSize="14sp"
+        android:textSize="16sp"
         android:textColor="?android:attr/textColorSecondary"
         android:gravity="center" />
 
@@ -53,6 +55,9 @@
                 style="?android:attr/buttonStyleSmall"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:background="@drawable/search_bar_background"
+                android:textColor="?attr/colorPrimary"
+                android:fontFamily="sans-serif-light"
                 android:maxLines="1"
                 android:ellipsize="end"
                 android:minWidth="0dp"
@@ -87,6 +92,9 @@
                 style="?android:attr/buttonStyleSmall"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:background="@drawable/search_bar_background"
+                android:textColor="?attr/colorPrimary"
+                android:fontFamily="sans-serif-light"
                 android:maxLines="1"
                 android:ellipsize="end"
                 android:minWidth="0dp"

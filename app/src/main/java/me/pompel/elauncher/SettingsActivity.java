@@ -18,6 +18,11 @@ public class SettingsActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
+        android.content.SharedPreferences prefs =
+                androidx.preference.PreferenceManager.getDefaultSharedPreferences(this);
+        LauncherTheme.applyTheme(this, LauncherTheme.isDarkMode(prefs, getResources()));
+        LauncherTheme.applySystemBars(this);
+
         setContentView(R.layout.settings_activity);
         if (savedInstanceState == null) {
             getSupportFragmentManager()
@@ -32,9 +37,7 @@ public class SettingsActivity extends AppCompatActivity {
 
         gestureDetector = new GestureDetector(this, new GestureListener());
 
-        applyOrientationLock(this,
-                androidx.preference.PreferenceManager.getDefaultSharedPreferences(this)
-                        .getBoolean("lock_portrait_preference", true));
+        applyOrientationLock(this, prefs.getBoolean("lock_portrait_preference", true));
     }
 
     /** Applies the orientation lock: portrait unless the lock is off
@@ -94,18 +97,35 @@ public class SettingsActivity extends AppCompatActivity {
             
             // Initialize dark mode switch to show current system state if not explicitly set
             androidx.preference.SwitchPreferenceCompat darkModePreference = 
-                findPreference("dark_mode_preference");
+                findPreference(LauncherTheme.DARK_MODE_PREF);
             if (darkModePreference != null) {
                 android.content.SharedPreferences prefs = 
                     androidx.preference.PreferenceManager.getDefaultSharedPreferences(requireContext());
                 
                 // Only set the visual state if the preference hasn't been explicitly set
-                if (!prefs.contains("dark_mode_preference")) {
+                if (!prefs.contains(LauncherTheme.DARK_MODE_PREF)) {
                     boolean systemDarkMode = (getResources().getConfiguration().uiMode & 
                             android.content.res.Configuration.UI_MODE_NIGHT_MASK) == 
                             android.content.res.Configuration.UI_MODE_NIGHT_YES;
                     darkModePreference.setChecked(systemDarkMode);
+                    // setChecked persists the seeded value; keep the follow-system
+                    // semantics (seed is visual only) by dropping the auto-written
+                    // key again — an unset preference must keep following the system.
+                    prefs.edit().remove(LauncherTheme.DARK_MODE_PREF).apply();
                 }
+
+                // Live retheme: switching dark mode restyles the screen right away.
+                // Replacing the fragment re-inflates the preference rows so every
+                // theme attribute (text, switches, seekbar, dividers) re-resolves.
+                darkModePreference.setOnPreferenceChangeListener((preference, newValue) -> {
+                    boolean dark = Boolean.TRUE.equals(newValue);
+                    requireActivity().setTheme(dark ? R.style.AppTheme_InvertedDark : R.style.AppTheme);
+                    LauncherTheme.applySystemBars(requireActivity());
+                    requireActivity().getSupportFragmentManager().beginTransaction()
+                            .replace(R.id.settings, new SettingsFragment())
+                            .commit();
+                    return true;
+                });
             }
 
             // Re-apply the lock immediately when the switch is toggled

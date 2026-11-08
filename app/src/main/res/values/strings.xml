@@ -1,5 +1,6 @@
 <resources>
     <string name="title_activity_settings">eLauncher Settings</string>
+    <string name="settings_title">Settings</string>
     <string name="number_of_apps_summary">shown in the main launcher</string>
     <string name="number_of_apps_title">Number of Apps</string>
     <string name="dark_mode_title">Dark Mode</string>

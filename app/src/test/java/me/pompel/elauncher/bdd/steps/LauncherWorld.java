@@ -600,6 +600,28 @@ public class LauncherWorld {
         idle();
     }
 
+    /** Resolved colorPrimary of the settings activity's theme: pure black on the
+     * light theme, pure white on AppTheme_InvertedDark (e-ink palette swap). */
+    public int settingsPrimaryColor() {
+        int[] color = new int[1];
+        settingsScenario.onActivity(a -> {
+            try (android.content.res.TypedArray ta =
+                         a.obtainStyledAttributes(new int[]{androidx.appcompat.R.attr.colorPrimary})) {
+                color[0] = ta.getColor(0, 0);
+            }
+        });
+        return color[0];
+    }
+
+    /** Text color of the first preference row title in the settings screen:
+     * pure colorPrimary in the custom row layouts (black on light, white on dark). */
+    public int settingsTitleTextColor() {
+        android.view.View view = findInSettings(
+                v -> v instanceof android.widget.TextView && v.getId() == android.R.id.title);
+        if (!(view instanceof android.widget.TextView)) throw new AssertionError("No preference title found");
+        return ((android.widget.TextView) view).getTextColors().getDefaultColor();
+    }
+
     /** The number-of-apps SeekBarPreference renders an inline SeekBar (showSeekBarValue defaults
      * to true, so no dialog appears). Programmatic setProgress notifies the listener with
      * fromUser=false and androidx persists only on user input — invoke the bound listener

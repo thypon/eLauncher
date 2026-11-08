@@ -2,7 +2,6 @@ package me.pompel.elauncher;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.appcompat.app.AppCompatDelegate;
 import androidx.preference.PreferenceManager;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -19,8 +18,6 @@ import android.content.SharedPreferences;
 import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
-import android.content.res.Configuration;
-import android.content.res.TypedArray;
 import android.database.Cursor;
 import android.graphics.Typeface;
 import android.net.Uri;
@@ -42,7 +39,6 @@ import android.util.TypedValue;
 import android.view.GestureDetector;
 import android.view.MotionEvent;
 import android.view.View;
-import android.view.Window;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.EditText;
 import android.widget.LinearLayout;
@@ -60,7 +56,6 @@ import java.util.TreeMap;
 
 public class MainActivity extends AppCompatActivity {
     private static final String NUMBER_OF_APPS = "number_of_apps_preference";
-    private static final String DARK_MODE = "dark_mode_preference";
     private static final String LOCK_PORTRAIT = "lock_portrait_preference";
 
     private ArrayList<App> appList;
@@ -277,17 +272,8 @@ public class MainActivity extends AppCompatActivity {
         applyOrientationLock();
 
         // Get system dark mode as default
-        boolean systemDarkMode = (getResources().getConfiguration().uiMode & 
-                Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES;
-        boolean isDarkMode = prefs.getBoolean(DARK_MODE, systemDarkMode);
-
-        if (isDarkMode) {
-            AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES);
-            setTheme(R.style.AppTheme_InvertedDark);
-        } else {
-            AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO);
-            setTheme(R.style.AppTheme);
-        }
+        boolean isDarkMode = LauncherTheme.isDarkMode(prefs, getResources());
+        LauncherTheme.applyTheme(this, isDarkMode);
 
         setContentView(R.layout.activity_main);
 
@@ -302,11 +288,7 @@ public class MainActivity extends AppCompatActivity {
         }
 
         BigmeShims.queryLauncherProvider(this);
-        Window window = getWindow();
-        //window.addFlags(FLAG_LAYOUT_NO_LIMITS);
-        //window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
-        window.setStatusBarColor(getColorFromAttr(androidx.appcompat.R.attr.background));
-        window.setNavigationBarColor(getColorFromAttr(androidx.appcompat.R.attr.background));
+        LauncherTheme.applySystemBars(this);
 
         appList = new ArrayList<>();
         appNames = new ArrayList<>();
@@ -381,7 +363,7 @@ public class MainActivity extends AppCompatActivity {
         int i = 0;
         for (i = 0; i < prefs.getInt(NUMBER_OF_APPS, 8); i++) {
             TextView textView = new TextView(this);
-            textView.setTextColor(getColorFromAttr(androidx.appcompat.R.attr.colorPrimary));
+            textView.setTextColor(LauncherTheme.getColorFromAttr(this, androidx.appcompat.R.attr.colorPrimary));
             textView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 32);
             textView.setTypeface(Typeface.create(!hasUsageStatsPermission() ? "sans-serif" : "sans-serif-light", Typeface.NORMAL));
             textView.setPadding(0, 0, 0, 50);
@@ -420,7 +402,7 @@ public class MainActivity extends AppCompatActivity {
 
         if (hasUsageStatsPermission()) {
             TextView textView = new TextView(this);
-            textView.setTextColor(getColorFromAttr(androidx.appcompat.R.attr.colorPrimary));
+            textView.setTextColor(LauncherTheme.getColorFromAttr(this, androidx.appcompat.R.attr.colorPrimary));
             textView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 32);
             textView.setTypeface(Typeface.create("sans-serif", Typeface.ITALIC));
             textView.setPadding(0, 0, 0, 50);
@@ -759,14 +741,5 @@ public class MainActivity extends AppCompatActivity {
         }
 
         return "";
-    }
-
-    private int getColorFromAttr(int attr) {
-        TypedValue typedValue = new TypedValue();
-        int color;
-        try (TypedArray a = obtainStyledAttributes(typedValue.data, new int[]{attr})) {
-            color = a.getColor(0, 0);
-        }
-        return color;
     }
 }

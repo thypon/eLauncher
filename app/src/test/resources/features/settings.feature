@@ -82,3 +82,27 @@ Feature: Settings screen
     Given the right gesture is assigned to a missing app
     And the settings screen is open
     Then the right gesture button shows "Default"
+
+  Scenario: Dark mode preference styles the settings screen dark
+    Given dark mode is turned on
+    And the settings screen is open
+    Then the settings screen uses the dark theme
+
+  Scenario: Dark mode preference off styles the settings screen light
+    Given dark mode is turned off
+    And the settings screen is open
+    Then the settings screen uses the light theme
+
+  Scenario: Unset dark mode follows the night system setting on the settings screen
+    Given the system is in night mode
+    And the settings screen is open
+    Then the settings screen uses the dark theme
+
+  Scenario: Toggling dark mode re-themes the settings screen immediately
+    Given the settings screen is open
+    When I toggle the dark mode switch
+    Then the settings screen uses the dark theme
+
+  Scenario: Settings rows use the launcher typography
+    Given the settings screen is open
+    Then the settings rows use the launcher typography
