@@ -649,6 +649,17 @@ public class DashboardActivity extends AppCompatActivity {
                 case MotionEvent.ACTION_CANCEL:
                     int height = Math.round(widget.getLayoutParams().height / dm.density);
                     store.setSize(id, height);
+                    // re-create the widget view: updateAppWidgetSize alone does
+                    // not force the provider's RemoteViews to re-layout visually
+                    ViewGroup row = (ViewGroup) v.getParent();
+                    row.removeViewAt(0);
+                    AppWidgetHostView fresh = host.createView(
+                            DashboardActivity.this, id, widgets.getAppWidgetInfo(id));
+                    fresh.updateAppWidgetSize(new Bundle(), columnWidthDp(), height,
+                            columnWidthDp(), height);
+                    fresh.setLayoutParams(new FrameLayout.LayoutParams(
+                            ViewGroup.LayoutParams.MATCH_PARENT, (int) dp(height)));
+                    row.addView(fresh, 0);
                     return true;
                 default:
                     return true;

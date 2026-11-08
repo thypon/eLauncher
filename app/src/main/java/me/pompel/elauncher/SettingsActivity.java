@@ -114,16 +114,26 @@ public class SettingsActivity extends AppCompatActivity {
                     prefs.edit().remove(LauncherTheme.DARK_MODE_PREF).apply();
                 }
 
-                // Live retheme: switching dark mode restyles the screen right away.
-                // Replacing the fragment re-inflates the preference rows so every
-                // theme attribute (text, switches, seekbar, dividers) re-resolves.
+                // Live retheme: switching dark mode restyles the screen right
+                // away. setTheme after the decor does not re-style an already
+                // built window, so: the delegate flips the night mode (the
+                // main view re-resolves on return), the preference fragment is
+                // replaced (rows re-inflate: text, switches, dividers) and the
+                // root background is re-applied to the new theme color.
                 darkModePreference.setOnPreferenceChangeListener((preference, newValue) -> {
                     boolean dark = Boolean.TRUE.equals(newValue);
-                    requireActivity().setTheme(dark ? R.style.AppTheme_InvertedDark : R.style.AppTheme);
+                    LauncherTheme.applyTheme(requireActivity(), dark);
                     LauncherTheme.applySystemBars(requireActivity());
+                    requireActivity().setTheme(dark ? R.style.AppTheme_InvertedDark : R.style.AppTheme);
                     requireActivity().getSupportFragmentManager().beginTransaction()
                             .replace(R.id.settings, new SettingsFragment())
                             .commit();
+                    android.util.TypedValue tv = new android.util.TypedValue();
+                    requireActivity().getTheme().resolveAttribute(
+                            android.R.attr.colorBackground, tv, true);
+                    requireActivity().findViewById(R.id.settings_activity_root)
+                            .setBackgroundResource(tv.resourceId != 0
+                                    ? tv.resourceId : tv.data);
                     return true;
                 });
             }
