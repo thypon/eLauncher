@@ -1,0 +1,249 @@
+package me.pompel.elauncher.bdd.steps;
+
+import android.app.Activity;
+import android.appwidget.AppWidgetManager;
+import android.content.Intent;
+
+import io.cucumber.java.en.Given;
+import io.cucumber.java.en.Then;
+import io.cucumber.java.en.When;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotEquals;
+import static org.junit.Assert.assertTrue;
+import static org.robolectric.Shadows.shadowOf;
+
+import org.robolectric.shadows.ShadowActivity;
+
+public class DashboardSteps {
+    private final LauncherWorld world;
+
+    public DashboardSteps(LauncherWorld world) {
+        this.world = world;
+    }
+
+    @Given("a widget provider is installed")
+    public void widgetProviderInstalled() {
+        world.installWidgetProvider("", "");
+    }
+
+    @Given("a {string} widget provider offering {string} is installed")
+    public void namedWidgetProviderInstalled(String label, String description) {
+        world.installWidgetProvider(label, description);
+    }
+
+    @Given("binding widgets is allowed")
+    public void bindingWidgetsAllowed() {
+        world.allowWidgetBinding(true);
+    }
+
+    @Given("the eBoard is started")
+    public void eboardStarted() {
+        world.startDashboard();
+    }
+
+    @Given("the board remembers a widget without a provider")
+    public void boardRemembersUnboundWidget() {
+        world.seedBoardIds(424242);
+    }
+
+    @When("I tap the add widget button")
+    public void tapAddWidget() {
+        world.tapAddWidgetButton();
+    }
+
+    /** Emulates the system widget picker: it binds the reserved appWidgetId to the
+     * picked provider and returns RESULT_OK with the id. */
+    @When("the widget picker binds a widget")
+    public void pickerBindsWidget() {
+        ShadowActivity.IntentForResult request = shadowOf(world.dashboard()).getNextStartedActivityForResult();
+        assertEquals(AppWidgetManager.ACTION_APPWIDGET_PICK, request.intent.getAction());
+        int id = request.intent.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, -1);
+        assertNotEquals("picker request must carry a reserved widget id", -1, id);
+        shadowOf(world.widgetManager()).bindAppWidgetId(id, world.widgetProvider);
+        Intent result = new Intent().putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, id);
+        shadowOf(world.dashboard()).receiveResult(request.intent, Activity.RESULT_OK, result);
+        world.idle();
+    }
+
+    @When("the widget picker is cancelled")
+    public void pickerCancelled() {
+        ShadowActivity.IntentForResult request = shadowOf(world.dashboard()).getNextStartedActivityForResult();
+        assertEquals(AppWidgetManager.ACTION_APPWIDGET_PICK, request.intent.getAction());
+        shadowOf(world.dashboard()).receiveResult(request.intent, Activity.RESULT_CANCELED, null);
+        world.idle();
+    }
+
+    @When("the eBoard is restarted")
+    public void eboardRestarted() {
+        world.restartDashboard();
+    }
+
+    @When("I long press the widget row")
+    public void longPressWidgetRow() {
+        world.longPressBoardRow(0);
+    }
+
+    @When("I hold the widget row")
+    public void holdWidgetRow() {
+        world.holdBoardRow(0);
+    }
+
+    @Then("a widget row is on the board")
+    public void widgetRowOnBoard() {
+        world.await(() -> world.rowCount() == 1 && !world.emptyHintVisible());
+    }
+
+    @Then("the board shows the empty hint")
+    public void boardShowsEmptyHint() {
+        world.await(() -> world.rowCount() == 0 && world.emptyHintVisible());
+    }
+
+    @Then("the add widget button is visible")
+    public void addWidgetButtonVisible() {
+        assertTrue("add widget button should be visible on an empty board",
+                world.addWidgetButtonVisible());
+    }
+
+    @Then("the add widget button is hidden")
+    public void addWidgetButtonHidden() {
+        assertTrue("add widget button should be hidden when widgets are on the board",
+                !world.addWidgetButtonVisible());
+    }
+
+    @Then("the widget is remembered by the board")
+    public void widgetRemembered() {
+        assertEquals(1, world.storedBoardIds().size());
+    }
+
+    @Then("the widget is forgotten by the board")
+    public void widgetForgotten() {
+        assertTrue("expected empty board store, was: " + world.storedBoardIds(),
+                world.storedBoardIds().isEmpty());
+    }
+
+    @Then("the launcher lists an {string} entry")
+    public void launcherListsEntry(String label) {
+        assertTrue("expected a launcher entry labeled " + label, world.hasLauncherEntry(label));
+    }
+
+    @When("I add a widget from the widget adder")
+    public void addWidgetFromAdder() {
+        tapAddWidget();
+        widgetAdderPopoverOpens();
+        selectWidgetKindFromAdder();
+        resolveAdderOutcome();
+    }
+
+    @When("the widget adder popover opens")
+    public void widgetAdderPopoverOpens() {
+        assertTrue("expected the widget adder popover to open", world.adderOpen());
+    }
+
+    @Then("the widget adder popover is closed")
+    public void widgetAdderPopoverClosed() {
+        assertTrue("expected the widget adder popover to be closed", !world.adderOpen());
+    }
+
+    @Then("it covers half of the screen, anchored at the bottom")
+    public void adderCoversHalfBottom() {
+        world.assertAdderCoversHalfBottom();
+    }
+
+    @Then("it lists the {string} widget kind {string}")
+    public void adderListsKind(String label, String description) {
+        assertTrue("popover should list widget " + label, world.adderListsKind(label, description));
+    }
+
+    @When("I long press the empty board space")
+    public void longPressEmptyBoardSpace() {
+        world.longPressBoardEmpty();
+    }
+
+    @When("I select the widget kind from the widget adder")
+    public void selectWidgetKindFromAdder() {
+        world.clickFirstAdderKind();
+    }
+
+    @Then("each kind row shows a widget preview")
+    public void adderRowsShowPreview() {
+        assertTrue("each adder kind row must include a widget preview",
+                world.adderRowsShowPreview());
+    }
+
+    @Then("the board stays clear of the system status bar")
+    public void boardStaysClearOfStatusBar() {
+        assertTrue("the board must leave room for the system header",
+                world.boardFitsSystemWindows());
+    }
+
+    @Then("the remove handle is clearly visible")
+    public void removeHandleClearlyVisible() {
+        assertTrue("the (x) handle must draw on a dark badge (visible on any widget)",
+                world.removeHandleVisibleAndDark(0));
+    }
+
+    @When("I select the {string} widget kind")
+    public void selectNamedWidgetKind(String label) {
+        world.clickAdderKind(label);
+    }
+
+    @When("I dismiss the widget adder popover")
+    public void dismissWidgetAdder() {
+        world.dismissAdder();
+    }
+
+    /** Whatever the binding path produced (direct bind or system picker),
+     * completes it so the board reaches a bound-widget state. */
+    private void resolveAdderOutcome() {
+        world.resolveAdderOutcome();
+    }
+
+    @Then("the system widget picker opens")
+    public void systemWidgetPickerOpens() {
+        world.assertSystemPickerStarted();
+    }
+
+    @Then("the widget shows a remove handle")
+    public void removeHandleVisible() {
+        assertTrue("expected an (x) remove handle in edit mode",
+                world.rowChildVisible(0, me.pompel.elauncher.R.id.remove_handle));
+    }
+
+    @When("I tap the remove handle")
+    public void tapRemoveHandle() {
+        world.rowChildPerformClick(0, me.pompel.elauncher.R.id.remove_handle);
+    }
+
+    @Given("the board has 2 widgets")
+    public void boardHasTwoWidgets() {
+        world.seedTwoWidgets();
+    }
+
+    @When("the second widget is moved before the first")
+    public void moveSecondBeforeFirst() {
+        world.dashboard().moveBoardRow(1, 0);
+        world.idle();
+    }
+
+    @Then("the board order is {string}")
+    public void boardOrderIs(String order) {
+        assertEquals(order, world.storedBoardIdsAsString());
+    }
+
+    @When("the widget is resized to {int}dp")
+    public void resizeWidget(int dp) {
+        world.dashboard().applyRowHeight(0, dp);
+        world.idle();
+    }
+
+    @Then("the widget height is stored as {int}dp")
+    public void widgetHeightStored(int dp) {
+        assertEquals(dp, world.storedHeight(0));
+    }
+
+    @Then("the widget is rendered {int}dp tall")
+    public void widgetRenderedTall(int dp) {
+        assertEquals(dp, world.renderedRowHeightDp(0));
+    }
+}

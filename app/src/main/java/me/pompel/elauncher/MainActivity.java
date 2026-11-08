@@ -28,7 +28,6 @@ import android.os.Build;
 import android.os.Bundle;
 import android.window.OnBackInvokedCallback;
 import android.window.OnBackInvokedDispatcher;
-import android.provider.MediaStore;
 import android.provider.Settings;
 import android.text.Editable;
 import android.text.SpannableString;
@@ -168,7 +167,13 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void safeStartActivity(Intent intent) {
-        if (intent != null) startActivity(intent);
+        if (intent == null) return;
+        try {
+            startActivity(intent);
+        } catch (RuntimeException e) {
+            // no handler for this intent (e.g. browser picker with no browser
+            // installed): swallow instead of crashing the launcher
+        }
     }
 
     // check if you have USAGE_STATS permission
@@ -458,13 +463,6 @@ public class MainActivity extends AppCompatActivity {
                 : ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED);
     }
 
-    private boolean canMakePhoneCall() {
-        PackageManager packageManager = getPackageManager();
-        Intent intent = new Intent(Intent.ACTION_CALL);
-        intent.setData(Uri.parse("tel:1234567890"));
-        return intent.resolveActivity(packageManager) != null;
-    }
-
     private String getDefaultBrowserPackage() {
         Intent browserIntent = new Intent("android.intent.action.VIEW", Uri.parse("http://"));
         ResolveInfo resolveInfo = getPackageManager().resolveActivity(browserIntent,PackageManager.MATCH_DEFAULT_ONLY);
@@ -489,7 +487,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private Intent getDefaultLeftGestureIntent() {
-        return new Intent(canMakePhoneCall() ? Intent.ACTION_DIAL : MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA);
+        return new Intent(this, DashboardActivity.class);
     }
 
     private List<ResolveInfo> getLaunchersResolveInfos() {
@@ -547,6 +545,10 @@ public class MainActivity extends AppCompatActivity {
         String pkg = prefs.getString(prefKey, "");
         if (pkg.isEmpty()) {
             safeStartActivity(defaultIntent);
+            return;
+        }
+        if (GesturePreference.EBOARD_PACKAGE.equals(pkg)) {
+            safeStartActivity(new Intent(this, DashboardActivity.class));
             return;
         }
         Intent intent = getPackageManager().getLaunchIntentForPackage(pkg);

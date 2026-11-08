@@ -1,10 +1,11 @@
 package me.pompel.elauncher.bdd.steps;
 
 import android.content.Intent;
-import android.provider.MediaStore;
 import io.cucumber.java.en.Given;
 import io.cucumber.java.en.Then;
 import io.cucumber.java.en.When;
+import me.pompel.elauncher.DashboardActivity;
+import me.pompel.elauncher.GesturePreference;
 import me.pompel.elauncher.SettingsActivity;
 
 import static org.junit.Assert.assertEquals;
@@ -17,11 +18,6 @@ public class GestureSteps {
 
     public GestureSteps(LauncherWorld world) {
         this.world = world;
-    }
-
-    @Given("a phone app {string} is installed")
-    public void phoneAppInstalled(String label) {
-        world.installPhoneApp(label);
     }
 
     @Given("a browser app {string} is installed")
@@ -43,6 +39,11 @@ public class GestureSteps {
     @Given("the {word} gesture is assigned to the missing app {string}")
     public void gestureAssignedToMissingApp(String side, String pkg) {
         world.setGesturePackage(side, pkg);
+    }
+
+    @Given("the {word} gesture is assigned to eBoard")
+    public void gestureAssignedToEboard(String side) {
+        world.setGesturePackage(side, GesturePreference.EBOARD_PACKAGE);
     }
 
     @When("I fling {word} on the home screen")
@@ -105,19 +106,14 @@ public class GestureSteps {
         }
     }
 
-    @Then("the camera opens")
-    public void cameraOpens() {
+    @Then("the eBoard dashboard opens")
+    public void eboardDashboardOpens() {
         Intent started = world.nextStartedActivity();
         assertNotNull("no activity started", started);
-        assertEquals("expected the still-image camera intent",
-                MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA, started.getAction());
-    }
-
-    @Then("the dialer opens")
-    public void dialerOpens() {
-        Intent started = world.nextStartedActivity();
-        assertNotNull("no activity started", started);
-        assertEquals("expected an ACTION_DIAL intent", Intent.ACTION_DIAL, started.getAction());
+        assertTrue("eBoard intent must target a component, got: " + started
+                + " action=" + started.getAction(),
+                started.getComponent() != null);
+        assertEquals(DashboardActivity.class.getName(), started.getComponent().getClassName());
     }
 
     @Then("the browser picker opens")

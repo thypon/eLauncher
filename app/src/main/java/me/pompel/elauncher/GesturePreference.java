@@ -21,6 +21,10 @@ public class GesturePreference extends Preference {
     private static final String KEY_LEFT_GESTURE = "left_gesture_package";
     private static final String KEY_RIGHT_GESTURE = "right_gesture_package";
 
+    /** Sentinel value stored when the user picks the built-in eBoard dashboard
+     * as a gesture target ("@" cannot appear in a real package name). */
+    public static final String EBOARD_PACKAGE = "@eboard";
+
     public GesturePreference(Context context, AttributeSet attrs) {
         super(context, attrs);
         setLayoutResource(R.layout.preference_gesture);
@@ -51,6 +55,9 @@ public class GesturePreference extends Preference {
         if (packageName == null || packageName.isEmpty()) {
             return getContext().getString(defaultRes);
         }
+        if (EBOARD_PACKAGE.equals(packageName)) {
+            return getContext().getString(R.string.eboard_name);
+        }
         try {
             PackageManager pm = getContext().getPackageManager();
             return pm.getApplicationLabel(pm.getApplicationInfo(packageName, 0)).toString();
@@ -61,6 +68,8 @@ public class GesturePreference extends Preference {
 
     private void showAppPicker(boolean isLeft) {
         List<AppInfo> apps = loadApps();
+        // the built-in eBoard dashboard is offered first, above every external app
+        apps.add(0, new AppInfo(getContext().getString(R.string.eboard_name), EBOARD_PACKAGE));
 
         String[] names = new String[apps.size()];
         for (int i = 0; i < apps.size(); i++) {
@@ -108,6 +117,9 @@ public class GesturePreference extends Preference {
         List<ResolveInfo> resolveInfos = pm.queryIntentActivities(intent, 0);
 
         for (ResolveInfo info : resolveInfos) {
+            // skip the launcher's own activities: the built-in eBoard target is
+            // offered by the pinned first entry, self entries are just noise
+            if (info.activityInfo.packageName.equals(getContext().getPackageName())) continue;
             String name = info.loadLabel(pm).toString();
             String pkg = info.activityInfo.packageName;
             apps.add(new AppInfo(name, pkg));

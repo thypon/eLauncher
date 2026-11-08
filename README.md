@@ -19,7 +19,8 @@ eLauncher favours easy readibility on eInk/ePaper devices, such as the Onyx Boox
 - Long press an app field on the homescreen to assign an app, app can be renamed
 - Type to search in app drawer, if only one result is left, it is automatically launched (like OLauncher)
 - Gestures: swipe down for notification center, left/right swipe to launch any app (configurable in Settings), double tap to open the original launcher
-- Customizable swipe gestures: pick any app for left and right swipe gestures via Settings
+- Customizable swipe gestures: pick any app — or the built-in eBoard dashboard — for the left and right swipe via Settings
+- eBoard: a macOS-Snow-Leopard-style dashboard of persistent widgets, also registered as its own launcher entry named "eBoard" and opened by the default left swipe
 - Hold on empty space to change the number of apps on homescreen
 
 ## apk size differences with OLauncher Light
@@ -51,7 +52,7 @@ Behavior specs live in Gherkin features (`app/src/test/resources/features/`) and
 ./gradlew jacocoUnitTestReport       # HTML/XML coverage report
 ```
 
-- Feature files describe every launcher behavior (drawer, fuzzy search, homescreen slots, gestures, settings, first-launch onboarding, dark mode, last-used-app, vendor shims).
+- Feature files describe every launcher behavior (drawer, fuzzy search, homescreen slots, gestures, settings, first-launch onboarding, dark mode, last-used-app, vendor shims, eBoard dashboard).
 - Step definitions are in `app/src/test/java/me/pompel/elauncher/bdd/steps/`.
 - `check` fails the build when line coverage of the app source drops below **80%** (`jacocoTestCoverageVerification`).
 - CI (`.github/workflows/ci.yml`) enforces the gate on every push and pull request.

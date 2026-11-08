@@ -1,22 +1,17 @@
 Feature: Home screen gestures
   The home screen reacts to flings, double taps and long presses.
   Horizontal flings are side-based, like pulling a screen edge inward:
-  a rightward fling opens the left gesture app (dialer/camera by default),
-  a leftward fling opens the right gesture app (browser by default);
-  vertical flings control the app drawer and the notification shade.
+  a rightward fling opens the left gesture app (the eBoard dashboard by
+  default), a leftward fling opens the right gesture app (browser by
+  default); vertical flings control the app drawer and the notification shade.
 
   Background:
     Given usage access onboarding is already done
     And the launcher is started
 
-  Scenario: Fling right opens the camera when no phone app can make calls
+  Scenario: Fling right opens the eBoard dashboard
     When I fling right on the home screen
-    Then the camera opens
-
-  Scenario: Fling right opens the dialer when a phone app is installed
-    Given a phone app "Dialer" is installed
-    When I fling right on the home screen
-    Then the dialer opens
+    Then the eBoard dashboard opens
 
   Scenario: Fling left opens the browser picker when no default browser exists
     When I fling left on the home screen
@@ -40,7 +35,7 @@ Feature: Home screen gestures
   Scenario: A stale gesture package is cleared and the default is used
     Given the left gesture is assigned to the missing app "com.fixtures.gone"
     When I fling right on the home screen
-    Then the camera opens
+    Then the eBoard dashboard opens
     And the left gesture preference is cleared
 
   Scenario: Swiping up opens the app drawer
