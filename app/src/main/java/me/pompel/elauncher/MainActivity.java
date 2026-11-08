@@ -492,7 +492,11 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private Intent getDefaultLeftGestureIntent() {
-        return new Intent(this, DashboardActivity.class);
+        // always the left-side default: tag the board with a left entry so it
+        // disables the leftward exit fling and animates the rightward one
+        Intent intent = new Intent(this, DashboardActivity.class);
+        intent.putExtra(DashboardActivity.EXTRA_ENTRY_DIRECTION, -1);
+        return intent;
     }
 
     private List<ResolveInfo> getLaunchersResolveInfos() {
@@ -556,7 +560,12 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
         if (GesturePreference.EBOARD_PACKAGE.equals(pkg)) {
-            safeStartActivity(new Intent(this, DashboardActivity.class));
+            // swipeEnterDirection was set at the top of this method from the
+            // pref key; the intent must be built here (not at a call site) to
+            // see the correct side
+            Intent intent = new Intent(this, DashboardActivity.class);
+            intent.putExtra(DashboardActivity.EXTRA_ENTRY_DIRECTION, swipeEnterDirection);
+            safeStartActivity(intent);
             return;
         }
         Intent intent = getPackageManager().getLaunchIntentForPackage(pkg);

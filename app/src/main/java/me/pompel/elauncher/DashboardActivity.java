@@ -18,6 +18,8 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
+
+import androidx.annotation.NonNull;
 import android.widget.Button;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
@@ -61,11 +63,21 @@ public class DashboardActivity extends AppCompatActivity {
     private BoardAdapter adapter;
     private boolean editMode;
     private AlertDialog adderDialog;
+    /** Screen side the launcher opened this board from: -1 left, +1 right,
+     * 0 when launched without the launcher (e.g. recents), in which case
+     * horizontal flings stay inert. */
+    private int entryDirection;
+    private GestureDetector flingDetector;
+
+    /** Intent extra carrying the launcher-side entry direction (-1/+1/0). */
+    public static final String EXTRA_ENTRY_DIRECTION = "me.pompel.elauncher.entry_direction";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_dashboard);
+        entryDirection = getIntent().getIntExtra(EXTRA_ENTRY_DIRECTION, 0);
+        flingDetector = new GestureDetector(this, new FlingListener());
         board = findViewById(R.id.board);
         emptyHint = findViewById(R.id.empty_hint);
         addWidgetButton = findViewById(R.id.add_widget);
@@ -133,6 +145,46 @@ public class DashboardActivity extends AppCompatActivity {
             return;
         }
         super.onBackPressed();
+    }
+
+    @Override
+    public boolean dispatchTouchEvent(android.view.MotionEvent ev) {
+        // observe-only: never consume, widget taps and scrolls keep working
+        flingDetector.onTouchEvent(ev);
+        return super.dispatchTouchEvent(ev);
+    }
+
+    /** Horizontal flings leave the board back to the launcher. The fling
+     * motion that opened the board is disabled inside it; the opposite
+     * fling finishes the board with the reverse directional animation. */
+    private class FlingListener extends GestureDetector.SimpleOnGestureListener {
+        @Override public boolean onDown(@NonNull MotionEvent e) { return true; }
+
+        @Override public boolean onFling(@NonNull MotionEvent e1,
+                @NonNull MotionEvent e2, float velocityX, float velocityY) {
+            float xDiff = e2.getX() - e1.getX();
+            float yDiff = e2.getY() - e1.getY();
+            if (entryDirection == 0 || editMode
+                    || Math.abs(xDiff) <= Math.abs(yDiff)
+                    || Math.abs(xDiff) <= 100 || Math.abs(velocityX) <= 100) {
+                return false;
+            }
+            // rightward fling = content moves right = left-side animation (-1)
+            int flingDirection = xDiff > 0 ? -1 : 1;
+            if (flingDirection != -entryDirection) {
+                return true; // the entry motion: disabled inside the board
+            }
+            exitToLauncher(flingDirection);
+            return true;
+        }
+    }
+
+    private void exitToLauncher(int direction) {
+        int[] anims = MainActivity.swipeLaunchAnimations(direction);
+        finish();
+        if (anims != null) {
+            overridePendingTransition(anims[0], anims[1]);
+        }
     }
 
     /** Rebuilds the board from the persisted widget list, dropping widgets

@@ -379,6 +379,27 @@ public class LauncherWorld {
         idle();
     }
 
+    /** Reference to the dashboard captured before a dashboard fling, so the
+     * exit animation can be asserted even after the activity finishes. */
+    public me.pompel.elauncher.DashboardActivity dashboardFlingTarget;
+
+    /** Horizontal fling on the eBoard dashboard screen. Mirrors fling() on
+     * the home screen: ~60px per 16ms, center start. Captures the activity
+     * reference first so the pending transition can be asserted later. */
+    public void flingOnDashboard(String direction) {
+        dashboardFlingTarget = dashboard();
+        me.pompel.elauncher.DashboardActivity a = dashboardFlingTarget;
+        int w = a.getResources().getDisplayMetrics().widthPixels;
+        int h = a.getResources().getDisplayMetrics().heightPixels;
+        int x0 = w / 2, y0 = h - 20;
+        int dx;
+        if ("left".equals(direction)) dx = -60;
+        else if ("right".equals(direction)) dx = 60;
+        else throw new IllegalArgumentException("unknown direction: " + direction);
+        runTouchStream(a, x0, y0, dx, 0, 8, 16L);
+        idle();
+    }
+
     /** Quick tap within the 50dp edge zone (no movement, no long-press delay). */
     public void edgeTap(String side) {
         scenario.onActivity(a -> {
@@ -898,6 +919,25 @@ public class LauncherWorld {
             idle(); // let the old decor detach before touching views again
         }
         dashboardScenario = androidx.test.core.app.ActivityScenario.launch(me.pompel.elauncher.DashboardActivity.class);
+        idle();
+    }
+
+    /** Launches the dashboard live with the exact intent the launcher produced
+     * (extras such as the entry direction are preserved). */
+    public void launchDashboardWith(android.content.Intent intent) {
+        android.app.Dialog stale = org.robolectric.shadows.ShadowDialog.getLatestDialog();
+        if (stale != null && stale.isShowing()) stale.dismiss();
+        if (dashboardScenario != null) {
+            dashboardScenario.close();
+            idle(); // let the old decor detach before touching views again
+        }
+        dashboardScenario = androidx.test.core.app.ActivityScenario.launch(intent);
+        idle();
+    }
+
+    /** Back press on the eBoard dashboard screen. */
+    public void pressBackOnDashboard() {
+        dashboardScenario.onActivity(a -> a.onBackPressed());
         idle();
     }
 
