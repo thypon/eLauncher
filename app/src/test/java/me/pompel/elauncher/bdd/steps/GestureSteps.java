@@ -6,12 +6,13 @@ import io.cucumber.java.en.Then;
 import io.cucumber.java.en.When;
 import me.pompel.elauncher.DashboardActivity;
 import me.pompel.elauncher.GesturePreference;
+import me.pompel.elauncher.MainActivity;
+import me.pompel.elauncher.R;
 import me.pompel.elauncher.SettingsActivity;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertTrue;
 
 public class GestureSteps {
     private final LauncherWorld world;
@@ -138,5 +139,34 @@ public class GestureSteps {
         String stored = world.gesturePackage(side);
         if (stored == null || stored.isEmpty()) return;
         throw new AssertionError("expected cleared " + side + "_gesture_package but was: " + stored);
+    }
+
+    /** Asserts the swipe/edge launch slides the new activity in from the given
+     * side while the launcher slides out to the opposite side. */
+    @Then("the launched activity animates in from the {word}")
+    public void launchedActivityAnimatesInFrom(String side) {
+        boolean left = "left".equals(side);
+        int expectedEnter = left ? R.anim.slide_in_left : R.anim.slide_in_right;
+        int expectedExit = left ? R.anim.slide_out_right : R.anim.slide_out_left;
+        MainActivity[] ref = new MainActivity[1];
+        world.scenario.onActivity(a -> ref[0] = a);
+        org.robolectric.shadows.ShadowActivity shadow = org.robolectric.Shadows.shadowOf(ref[0]);
+        world.await(() -> shadow.getPendingTransitionEnterAnimationResourceId() != -1);
+        assertEquals("wrong enter animation (from the " + side + ")",
+                expectedEnter, shadow.getPendingTransitionEnterAnimationResourceId());
+        assertEquals("wrong exit animation (from the " + side + ")",
+                expectedExit, shadow.getPendingTransitionExitAnimationResourceId());
+    }
+
+    @Then("the launched activity uses the default system animation")
+    public void launchedActivityUsesDefaultAnimation() {
+        world.await(() -> org.robolectric.shadows.ShadowApplication.getInstance().getNextStartedActivity() != null);
+        MainActivity[] ref = new MainActivity[1];
+        world.scenario.onActivity(a -> ref[0] = a);
+        org.robolectric.shadows.ShadowActivity shadow = org.robolectric.Shadows.shadowOf(ref[0]);
+        assertEquals("expected no custom enter animation",
+                -1, shadow.getPendingTransitionEnterAnimationResourceId());
+        assertEquals("expected no custom exit animation",
+                -1, shadow.getPendingTransitionExitAnimationResourceId());
     }
 }
