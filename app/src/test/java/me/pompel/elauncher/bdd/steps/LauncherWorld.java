@@ -98,6 +98,9 @@ public class LauncherWorld {
             pi.applicationInfo = new android.content.pm.ApplicationInfo();
             pi.applicationInfo.packageName = pkg;
             pi.applicationInfo.nonLocalizedLabel = label;
+            // real launcher apps always ship an icon; give the fixture the framework
+            // default so icon-related flows (e.g. the gesture picker) behave like reality
+            pi.applicationInfo.icon = android.R.drawable.sym_def_app_icon;
             pi.activities = new android.content.pm.ActivityInfo[1];
             pi.activities[0] = new android.content.pm.ActivityInfo();
             pi.activities[0].packageName = pkg;
@@ -113,7 +116,12 @@ public class LauncherWorld {
             filter.addCategory(Intent.CATEGORY_LAUNCHER);
             filter.addCategory(Intent.CATEGORY_DEFAULT);
             addActivityFilter(cn, filter);
+            // the shadow PackageManager only returns icons registered through
+            // setApplicationIcon; mirror a real app's launcher icon here
+            shadowOf(pm).setApplicationIcon(pkg, new android.graphics.drawable.ColorDrawable(android.graphics.Color.LTGRAY));
         }
+        // the launcher's own icon backs the eBoard entry in the gesture picker
+        shadowOf(pm).setApplicationIcon(appContext().getPackageName(), new android.graphics.drawable.ColorDrawable(android.graphics.Color.DKGRAY));
     }
 
     public static String pkgFor(String label) {
@@ -566,7 +574,13 @@ public class LauncherWorld {
     }
 
     public void clickGestureButton(String side) {
-        onView(withId(side.equals("left") ? R.id.left_gesture_button : R.id.right_gesture_button)).perform(click());
+        // performClick, not Espresso click(): Espresso injects real motion events and the
+        // tap's UP lands inside the just-opened picker dialog, phantom-clicking a row
+        int id = side.equals("left") ? R.id.left_gesture_button : R.id.right_gesture_button;
+        android.view.View view = findInSettings(
+                v -> v instanceof android.widget.Button && v.getId() == id);
+        if (view == null) throw new AssertionError("No " + side + " gesture button found");
+        view.performClick();
         idle();
     }
 
@@ -765,6 +779,27 @@ public class LauncherWorld {
     public String storedSlotPackage(int slot) {
         return android.preference.PreferenceManager.getDefaultSharedPreferences(appContext())
                 .getString("p" + slot, null);
+    }
+
+    /** True once the latest dialog's list shows rows and every visible row carries a
+     * non-null icon drawable (icons are loaded lazily, so this may be false briefly). */
+    public boolean pickerRowsShowIcons() {
+        android.widget.ListView list = findInDialog(android.widget.ListView.class);
+        if (list.getChildCount() == 0) {
+            // Robolectric does not always run a layout pass for dialog lists: force one
+            // so the adapter's rows (and their lazy icon loads) materialize
+            int w = list.getWidth() > 0 ? list.getWidth() : 800;
+            list.measure(View.MeasureSpec.makeMeasureSpec(w, View.MeasureSpec.EXACTLY),
+                    View.MeasureSpec.makeMeasureSpec(2000, View.MeasureSpec.AT_MOST));
+            list.layout(0, 0, w, 2000);
+            if (list.getChildCount() == 0) throw new AssertionError("picker list has no laid out rows");
+        }
+        for (int i = 0; i < list.getChildCount(); i++) {
+            android.widget.ImageView icon = list.getChildAt(i).findViewById(R.id.gesture_picker_icon);
+            if (icon == null) throw new AssertionError("row " + i + " has no icon view");
+            if (icon.getDrawable() == null) return false; // still loading lazily
+        }
+        return true;
     }
 
     /** Clicks the item with the given text in the latest shown dialog's list. */

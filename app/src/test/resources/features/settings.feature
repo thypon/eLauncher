@@ -35,6 +35,11 @@ Feature: Settings screen
     Then the left gesture button shows "eBoard"
     And the left gesture package is stored as "@eboard"
 
+  Scenario: The app picker shows an icon for every app
+    Given the settings screen is open
+    When I tap the left gesture button
+    Then every app in the picker shows an icon
+
   Scenario: Cancelling the gesture picker keeps the assignment
     Given the settings screen is open
     When I tap the left gesture button

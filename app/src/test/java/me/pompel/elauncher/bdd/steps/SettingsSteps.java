@@ -44,6 +44,12 @@ public class SettingsSteps {
         world.confirmDialog(buttonText);
     }
 
+    @Then("every app in the picker shows an icon")
+    public void everyPickerRowShowsIcon() {
+        // icons load lazily off the main thread; poll until every visible row has one
+        world.await(world::pickerRowsShowIcons);
+    }
+
     @Then("the {word} gesture button shows {string}")
     public void gestureButtonShows(String side, String label) {
         assertEquals(label, world.gestureButtonLabel(side));
