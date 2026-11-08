@@ -94,6 +94,10 @@ public class DashboardActivity extends AppCompatActivity {
         setContentView(R.layout.activity_dashboard);
         entryDirection = getIntent().getIntExtra(EXTRA_ENTRY_DIRECTION, 0);
         flingDetector = new GestureDetector(this, new FlingListener());
+        // the system back/forward edge gesture must not fight the disabled
+        // entry fling: exclude the entry side's edge from the system gesture
+        // zones (no-op below API 29 and for direct launches)
+        findViewById(android.R.id.content).post(this::applySystemGestureExclusion);
         board = findViewById(R.id.board);
         emptyHint = findViewById(R.id.empty_hint);
         addWidgetButton = findViewById(R.id.add_widget);
@@ -189,6 +193,20 @@ public class DashboardActivity extends AppCompatActivity {
         // observe-only: never consume, widget taps and scrolls keep working
         flingDetector.onTouchEvent(ev);
         return super.dispatchTouchEvent(ev);
+    }
+
+    /** Excludes the entry side's edge strip from the system gesture zones:
+     * the same side whose fling is disabled must not trigger the system
+     * back/forward gesture either. entryDirection 0 (direct launch) and
+     * API < 29 keep the system gestures untouched. */
+    private void applySystemGestureExclusion() {
+        if (entryDirection == 0 || Build.VERSION.SDK_INT < 29) return;
+        View root = findViewById(android.R.id.content);
+        int strip = Math.round(50 * getResources().getDisplayMetrics().density);
+        android.graphics.Rect edge = new android.graphics.Rect();
+        if (entryDirection == -1) edge.set(0, 0, strip, root.getHeight());
+        else edge.set(root.getWidth() - strip, 0, root.getWidth(), root.getHeight());
+        root.setSystemGestureExclusionRects(java.util.Collections.singletonList(edge));
     }
 
     /** Horizontal flings leave the board back to the launcher. The fling

@@ -171,6 +171,44 @@ public class GestureSteps {
                 expectedHomeEnter, shadow.getPendingTransitionEnterAnimationResourceId());
     }
 
+    /** Asserts the board's system gesture exclusion strips: the entry side's
+     * edge gesture (the system back/forward swipe) is suppressed together
+     * with the disabled fling; a direct launch excludes nothing. */
+    @Then("the board excludes the {word} screen edge from system gestures")
+    public void boardExcludesEdge(String side) {
+        boolean left = "left".equals(side);
+        DashboardActivity target = world.dashboard();
+        android.view.View[] root = new android.view.View[1];
+        world.await(() -> {
+            root[0] = target.findViewById(android.R.id.content);
+            return root[0] != null && !root[0].getSystemGestureExclusionRects().isEmpty();
+        });
+        java.util.List<android.graphics.Rect> rects = root[0].getSystemGestureExclusionRects();
+        assertTrue("no gesture exclusion rects on the board root", !rects.isEmpty());
+        for (android.graphics.Rect r : rects) {
+            assertTrue("exclusion rect is empty", !r.isEmpty());
+            if (left) {
+                assertEquals("exclusion not anchored to the left edge", 0, r.left);
+            } else {
+                assertEquals("exclusion not anchored to the right edge",
+                        root[0].getWidth(), r.right);
+            }
+        }
+    }
+
+    @Then("the board excludes no screen edge from system gestures")
+    public void boardExcludesNoEdge() {
+        DashboardActivity target = world.dashboard();
+        android.view.View[] root = new android.view.View[1];
+        world.await(() -> {
+            root[0] = target.findViewById(android.R.id.content);
+            return root[0] != null;
+        });
+        assertTrue("expected no gesture exclusion rects, got: "
+                + root[0].getSystemGestureExclusionRects(),
+                root[0].getSystemGestureExclusionRects().isEmpty());
+    }
+
     @Then("the browser picker opens")
     public void browserPickerOpens() {
         Intent started = world.nextStartedActivity();
