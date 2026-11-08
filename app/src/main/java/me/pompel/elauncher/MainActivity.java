@@ -75,6 +75,9 @@ public class MainActivity extends AppCompatActivity {
     private float startY = 0f;
     private boolean isLeftEdge = false;
     private boolean isRightEdge = false;
+    /** Pending launch direction for swipe/edge gestures: -1 = enter from left,
+     * 1 = enter from right, 0 = system default (consumed on next safeStartActivity). */
+    private int swipeEnterDirection = 0;
 
     private void loadApps() {
         appList.clear();
@@ -167,12 +170,32 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void safeStartActivity(Intent intent) {
+        int[] anims = swipeLaunchAnimations(swipeEnterDirection);
+        swipeEnterDirection = 0;
         if (intent == null) return;
         try {
-            startActivity(intent);
+            if (anims != null) {
+                // Directional swipe launch: the launched app slides in from the
+                // side the gesture came from, instead of the system's default.
+                startActivity(intent);
+                overridePendingTransition(anims[0], anims[1]);
+            } else {
+                startActivity(intent);
+            }
         } catch (RuntimeException e) {
             // no handler for this intent (e.g. browser picker with no browser
             // installed): swallow instead of crashing the launcher
+        }
+    }
+
+    /** Enter/exit animation resource ids for a directional swipe launch, as
+     * {enterResId, exitResId} for the launched and the calling activity; null
+     * keeps the system default animation. */
+    static int[] swipeLaunchAnimations(int direction) {
+        switch (direction) {
+            case -1: return new int[]{ R.anim.slide_in_left, R.anim.slide_out_right };
+            case 1:  return new int[]{ R.anim.slide_in_right, R.anim.slide_out_left };
+            default: return null;
         }
     }
 
@@ -542,6 +565,9 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void launchGesturePackageOrDefault(String prefKey, Intent defaultIntent) {
+        // Directional launch animation: the app slides in from the screen side
+        // its gesture is bound to (left-side app from the left, right from right).
+        swipeEnterDirection = "left_gesture_package".equals(prefKey) ? -1 : 1;
         String pkg = prefs.getString(prefKey, "");
         if (pkg.isEmpty()) {
             safeStartActivity(defaultIntent);

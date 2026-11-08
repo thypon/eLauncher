@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Swipe-left launch: the launcher slides out to the right edge. -->
+<translate xmlns:android="http://schemas.android.com/apk/res/android"
+    android:fromXDelta="0%p"
+    android:toXDelta="100%p"
+    android:duration="300"
+    android:interpolator="@android:anim/accelerate_interpolator" />
