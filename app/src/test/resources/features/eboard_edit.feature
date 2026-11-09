@@ -20,6 +20,20 @@ Feature: eBoard edit mode and widget adder
     Then the widget is rendered 140dp wide
     And the widget is rendered 280dp tall
 
+  Scenario: A widget advised wider than a column spans the full row
+    When the widget provider advises a maximum size of 300x280dp
+    And I add a widget from the widget adder
+    Then the widget is rendered 300dp wide
+    And the widget occupies the full board row
+
+  Scenario: A widget resized past a column keeps its width and spans the row
+    When I add a widget from the widget adder
+    And I hold the widget row
+    And I drag the resize handle sideways to 250dp
+    Then the widget is rendered 250dp wide
+    And the widget occupies the full board row
+    And the widget width is stored as 250dp
+
   Scenario: Scrollable widget content scrolls inside the board
     When I add a widget from the widget adder
     And I load scrollable content into the widget

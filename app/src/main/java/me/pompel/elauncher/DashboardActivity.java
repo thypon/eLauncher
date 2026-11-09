@@ -110,7 +110,21 @@ public class DashboardActivity extends AppCompatActivity {
         host = new AppWidgetHost(this, HOST_ID);
         store = new BoardStore(getSharedPreferences(BoardStore.PREFS_FILE, MODE_PRIVATE));
         adapter = new BoardAdapter();
-        board.setLayoutManager(new GridLayoutManager(this, 2));
+        // two columns by default; a row whose widget is wider than a
+        // column (an advised or resized wide widget) spans the full row
+        GridLayoutManager grid = new GridLayoutManager(this, 2);
+        grid.setSpanSizeLookup(new GridLayoutManager.SpanSizeLookup() {
+            @Override public int getSpanSize(int position) {
+                if (adapter == null || position < 0
+                        || position >= adapter.ids.size()) return 1;
+                int id = adapter.ids.get(position);
+                AppWidgetProviderInfo info = widgets.getAppWidgetInfo(id);
+                int wDp = store.hasWidth(id) ? store.width(id)
+                        : advisedWidthDp(info);
+                return wDp > columnWidthDp() ? 2 : 1;
+            }
+        });
+        board.setLayoutManager(grid);
         board.setClickable(true); // so the empty-space hold logic receives touches
         board.setAdapter(adapter);
         board.addItemDecoration(new BoardSpacingDecoration((int) dp(8)));
@@ -305,6 +319,13 @@ public class DashboardActivity extends AppCompatActivity {
         return ((GridLayoutManager) board.getLayoutManager()).getSpanCount();
     }
 
+    /** The span size the row's position occupies in the grid (1 = one
+     * column, 2 = the full board row). */
+    public int rowSpan(int position) {
+        GridLayoutManager lm = (GridLayoutManager) board.getLayoutManager();
+        return lm.getSpanSizeLookup().getSpanSize(position);
+    }
+
     /** Reorders the board (drag-to-reorder lands here) and persists the order;
      * out-of-range indices are no-ops. */
     public void moveBoardRow(int from, int to) {
@@ -347,11 +368,17 @@ public class DashboardActivity extends AppCompatActivity {
     }
 
     /** Advised row width for a widget: its provider's maximum advised
-     * width when it declares one, else the full grid column it lives in,
-     * clamped to the column width (rows never exceed their cell). */
+     * width when it declares one, up to the full board width — a wide
+     * widget is not squeezed into a grid column — else the full grid
+     * column it lives in, clamped to the board width. */
     private int advisedWidthDp(AppWidgetProviderInfo info) {
         if (info == null || info.maxResizeWidth <= 0) return columnWidthDp();
-        return Math.max(MIN_WIDTH_DP, Math.min(columnWidthDp(), info.maxResizeWidth));
+        return Math.max(MIN_WIDTH_DP, Math.min(boardWidthDp(), info.maxResizeWidth));
+    }
+
+    private int boardWidthDp() {
+        DisplayMetrics dm = getResources().getDisplayMetrics();
+        return Math.round(dm.widthPixels / dm.density);
     }
 
     /** Called when a hold lands on empty board space (no widget underneath):
@@ -725,10 +752,9 @@ public class DashboardActivity extends AppCompatActivity {
                     return true;
                 case MotionEvent.ACTION_MOVE: {
                     AppWidgetHostView widget = (AppWidgetHostView) row.getChildAt(0);
-                    // a widget never grows past its grid column: wider needs
-                    // a different row span, not a wider child
-                    int maxW = row.getWidth() > 0
-                            ? Math.round(row.getWidth() / dm.density) : columnWidthDp();
+                    // a widget may grow past its grid column: the row then
+                    // spans the full board (the lookup re-spans on release)
+                    int maxW = boardWidthDp();
                     int w = Math.max(MIN_WIDTH_DP, Math.min(maxW,
                             startWidthDp + Math.round((ev.getRawX() - startX) / dm.density)));
                     int h = Math.max(MIN_HEIGHT_DP, Math.min(MAX_HEIGHT_DP,
@@ -764,6 +790,10 @@ public class DashboardActivity extends AppCompatActivity {
                                 (int) dp(width), (int) dp(height)));
                         row.addView(fresh, 0);
                     }
+                    // rebind the row so the span lookup re-evaluates the new
+                    // width (a row resized past a column now spans the board)
+                    int position = adapter.ids.indexOf(id);
+                    if (position >= 0) adapter.notifyItemChanged(position);
                     return true;
                 }
                 default:
