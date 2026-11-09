@@ -30,7 +30,7 @@ import static org.junit.Assert.assertTrue;
  * (class discovery only — no glue execution there).
  */
 @RunWith(org.robolectric.ParameterizedRobolectricTestRunner.class)
-@org.robolectric.annotation.Config(sdk = 34, shadows = {me.pompel.elauncher.unit.ShadowNoRecreateActivity.class})
+@org.robolectric.annotation.Config(sdk = 34, shadows = {me.pompel.elauncher.unit.ShadowNoRecreateActivity.class, me.pompel.elauncher.unit.ShadowConfigureHost.class})
 public class CucumberRobolectricRunner {
 
     @org.robolectric.ParameterizedRobolectricTestRunner.Parameters(name = "{1}")

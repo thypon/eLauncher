@@ -9,6 +9,7 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.graphics.drawable.Drawable;
+import android.app.ActivityOptions;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
@@ -59,6 +60,12 @@ public class DashboardActivity extends AppCompatActivity {
     private static final int REQUEST_PICK = 1;
     private static final int REQUEST_BIND = 2;
     private static final int REQUEST_CONFIGURE = 3;
+    private static final String STATE_PENDING_CONFIGURE_ID = "eboard.pendingConfigureId";
+
+    /** The reserved app widget id whose configure screen is on screen
+     * (Launcher3 keeps the pending add alive across the configure round
+     * trip — and across the activity being recreated while it runs). */
+    private int pendingConfigureId = AppWidgetManager.INVALID_APPWIDGET_ID;
     /** Range of a widget row height in dp, used by the resize handle. */
     public static final int MIN_HEIGHT_DP = 140;
     public static final int MAX_HEIGHT_DP = 600;
@@ -103,6 +110,10 @@ public class DashboardActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_dashboard);
         entryDirection = getIntent().getIntExtra(EXTRA_ENTRY_DIRECTION, 0);
+        if (savedInstanceState != null) {
+            pendingConfigureId = savedInstanceState.getInt(STATE_PENDING_CONFIGURE_ID,
+                    AppWidgetManager.INVALID_APPWIDGET_ID);
+        }
         flingDetector = new GestureDetector(this, new FlingListener());
         // the system back/forward edge gesture must not fight the disabled
         // entry fling: exclude the entry side's edge from the system gesture
@@ -180,6 +191,12 @@ public class DashboardActivity extends AppCompatActivity {
         androidx.appcompat.app.AppCompatDelegate.setDefaultNightMode(dark
                 ? androidx.appcompat.app.AppCompatDelegate.MODE_NIGHT_YES
                 : androidx.appcompat.app.AppCompatDelegate.MODE_NIGHT_NO);
+    }
+
+    @Override
+    protected void onSaveInstanceState(Bundle outState) {
+        super.onSaveInstanceState(outState);
+        outState.putInt(STATE_PENDING_CONFIGURE_ID, pendingConfigureId);
     }
 
     @Override
@@ -625,14 +642,13 @@ public class DashboardActivity extends AppCompatActivity {
             // record), not the picker cell's captured copy
             widgets.updateAppWidgetOptions(id,
                     advisedOptions(widgets.getAppWidgetInfo(id)));
-            System.out.println("DBGBIND after options=" + widgets.getAppWidgetOptions(id));
             beginAdd(id, info);
             closeAdder();
         } else {
-            host.deleteAppWidgetId(id);
-            int fallback = host.allocateAppWidgetId();
+            // Launcher3 keeps the allocated id through the system bind
+            // confirmation: no second allocation behind the dialog
             Intent bind = new Intent(AppWidgetManager.ACTION_APPWIDGET_BIND);
-            bind.putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, fallback);
+            bind.putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, id);
             bind.putExtra(AppWidgetManager.EXTRA_APPWIDGET_PROVIDER, info.provider);
             startActivityForResult(bind, REQUEST_BIND);
             closeAdder(); // otherwise the popover scrim hides the system dialog
@@ -653,21 +669,31 @@ public class DashboardActivity extends AppCompatActivity {
     }
 
     /** Launcher3-style add completion: a provider that declares a configure
-     * activity must be configured before the row lands (the configure intent
-     * carries the reserved app widget id); cancelling frees the id.
-     * startAppWidgetConfigureActivityForResult is skipped: it only resolves
-     * through the appwidget system service (an IntentSender), which is not
-     * reachable here — the legacy explicit-intent contract is used instead. */
+     * activity must be configured before the row lands. The launch goes
+     * through AppWidgetHost: on device the system appwidget service builds
+     * the config PendingIntent (createAppWidgetConfigIntentSender), which is
+     * also the only way non-exported configure activities are startable from
+     * a launcher (a hand-built explicit intent throws SecurityException).
+     * Cancelling or an unresolvable configure activity frees the id. */
     private void beginAdd(int id, AppWidgetProviderInfo info) {
         if (info != null && info.configure != null) {
-            Intent config = new Intent(AppWidgetManager.ACTION_APPWIDGET_CONFIGURE);
-            config.putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, id);
-            config.setComponent(info.configure);
+            pendingConfigureId = id;
             try {
-                startActivityForResult(config, REQUEST_CONFIGURE);
+                // the system-sender PendingIntent starts as uid android; on
+                // U+ it is BAL-hardened unless the options grant the
+                // background-activity-start privilege — Launcher3 does the
+                // same via ActivityContext.makeDefaultActivityOptions
+                ActivityOptions options = ActivityOptions.makeBasic();
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                    options.setPendingIntentBackgroundActivityStartMode(
+                            ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED);
+                }
+                host.startAppWidgetConfigureActivityForResult(this, id, 0,
+                        REQUEST_CONFIGURE, options.toBundle());
             } catch (RuntimeException e) {
-                // unresolvable configure activity: nothing was configured,
-                // the reserved id must not leak
+                // ActivityNotFoundException / SecurityException: no usable
+                // configure activity, the reserved id must not leak
+                pendingConfigureId = AppWidgetManager.INVALID_APPWIDGET_ID;
                 host.deleteAppWidgetId(id);
             }
             return;
@@ -711,6 +737,10 @@ public class DashboardActivity extends AppCompatActivity {
             beginAdd(id, widgets.getAppWidgetInfo(id));
         }
         if (requestCode == REQUEST_CONFIGURE) {
+            // the result carries the id; a missing extra falls back to the
+            // pending record (Launcher3's completeTwoStageWidgetDrop)
+            if (id == -1) id = pendingConfigureId;
+            pendingConfigureId = AppWidgetManager.INVALID_APPWIDGET_ID;
             AppWidgetProviderInfo info = id == -1 ? null : widgets.getAppWidgetInfo(id);
             if (resultCode == RESULT_OK && info != null) {
                 store.add(id);

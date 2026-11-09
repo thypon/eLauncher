@@ -52,6 +52,7 @@ Feature: eBoard widgets
     And the widget adder popover opens
     And I select the widget kind from the widget adder
     Then the widget configuration is requested
+    And the configuration is requested through the widget host
     When the configuration succeeds
     Then a widget row is on the board
     And the widget is remembered by the board
@@ -64,6 +65,16 @@ Feature: eBoard widgets
     When the configuration is cancelled
     Then the board shows the empty hint
     And the widget is forgotten by the board
+
+  Scenario: The bind confirmation reuses the reserved widget id
+    Given binding widgets is not allowed
+    When I tap the add widget button
+    And the widget adder popover opens
+    And I select the widget kind from the widget adder
+    Then the system bind confirmation opens
+    And the widget binding is confirmed
+    Then a widget row is on the board
+    And the host allocated one widget id
 
   Scenario: The adder groups widget kinds by app in a grid
     Given another app's widget provider offering "An other widget" is installed
