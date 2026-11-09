@@ -127,6 +127,13 @@ public class SettingsSteps {
                 && world.settingsTitleTextColor() == expected);
     }
 
+    @Then("the settings screen background matches the theme background")
+    public void settingsRootBackgroundMatchesTheme() {
+        world.await(() -> world.settingsRootBackgroundColor() != 0
+                && world.settingsRootBackgroundColor()
+                        == world.settingsThemeBackgroundColor());
+    }
+
     @Then("the settings rows use the launcher typography")
     public void settingsRowsUseLauncherTypography() {
         world.await(() -> {

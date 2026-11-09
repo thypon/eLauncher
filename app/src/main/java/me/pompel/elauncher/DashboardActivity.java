@@ -545,13 +545,16 @@ public class DashboardActivity extends AppCompatActivity {
         resize.setLayoutParams(new FrameLayout.LayoutParams(
                 (int) dp(28), (int) dp(28), Gravity.BOTTOM | Gravity.END));
         resize.setVisibility(editMode ? View.VISIBLE : View.GONE);
-        resize.setOnTouchListener(new ResizeTouchListener(widget, id, heightDp));
+        resize.setOnTouchListener(new ResizeTouchListener(id));
         row.addView(resize);
 
         // hold-to-edit proxy overlay: taps are forwarded to the widget itself
         // (clicks pass through), a 700ms hold enters edit mode (iOS style)
         // and the widget receives a cancel when that happens. In edit mode
         // the overlay steps aside so handles and drag-reorder are reachable.
+        // The forwarded stream always targets the row's CURRENT widget view:
+        // a released resize re-creates it, a stale reference would dead-drop
+        // every later touch.
         View overlay = new View(this);
         overlay.setTag(R.id.hold_overlay);
         overlay.setLayoutParams(new FrameLayout.LayoutParams(
@@ -562,7 +565,7 @@ public class DashboardActivity extends AppCompatActivity {
             long now = android.os.SystemClock.uptimeMillis();
             android.view.MotionEvent cancel = android.view.MotionEvent.obtain(
                     now, now, MotionEvent.ACTION_CANCEL, down[0], down[1], 0);
-            widget.dispatchTouchEvent(cancel);
+            row.getChildAt(0).dispatchTouchEvent(cancel);
             cancel.recycle();
             enterEditMode();
         };
@@ -574,22 +577,22 @@ public class DashboardActivity extends AppCompatActivity {
                     down[1] = ev.getY();
                     handler.removeCallbacks(holdEnterEdit);
                     handler.postDelayed(holdEnterEdit, HOLD_MS);
-                    widget.dispatchTouchEvent(ev);
+                    row.getChildAt(0).dispatchTouchEvent(ev);
                     return true;
                 case MotionEvent.ACTION_MOVE:
                     if (Math.abs(ev.getX() - down[0]) > HOLD_CANCEL_SLOP_PX
                             || Math.abs(ev.getY() - down[1]) > HOLD_CANCEL_SLOP_PX) {
                         handler.removeCallbacks(holdEnterEdit);
                     }
-                    widget.dispatchTouchEvent(ev);
+                    row.getChildAt(0).dispatchTouchEvent(ev);
                     return true;
                 case MotionEvent.ACTION_UP:
                     handler.removeCallbacks(holdEnterEdit);
-                    widget.dispatchTouchEvent(ev);
+                    row.getChildAt(0).dispatchTouchEvent(ev);
                     return true;
                 case MotionEvent.ACTION_CANCEL:
                     handler.removeCallbacks(holdEnterEdit);
-                    widget.dispatchTouchEvent(ev);
+                    row.getChildAt(0).dispatchTouchEvent(ev);
                     return true;
                 default:
                     return true;
@@ -615,27 +618,30 @@ public class DashboardActivity extends AppCompatActivity {
 
     /** Dragging the corner resize handle resizes the row between
      * MIN_HEIGHT_DP and MAX_HEIGHT_DP, updating the widget host live; the new
-     * height is persisted on release. */
+     * height is persisted on release. The widget view is re-resolved on every
+     * event: a released resize re-creates the view, so stale references would
+     * resize a detached view. */
     private class ResizeTouchListener implements View.OnTouchListener {
-        private final AppWidgetHostView widget;
         private final int id;
         private float startY;
         private int startHeightDp;
 
-        ResizeTouchListener(AppWidgetHostView widget, int id, int startHeightDp) {
-            this.widget = widget;
+        ResizeTouchListener(int id) {
             this.id = id;
-            this.startHeightDp = startHeightDp;
         }
 
         @Override
         public boolean onTouch(View v, MotionEvent ev) {
             DisplayMetrics dm = getResources().getDisplayMetrics();
+            ViewGroup row = (ViewGroup) v.getParent();
             switch (ev.getActionMasked()) {
                 case MotionEvent.ACTION_DOWN:
                     startY = ev.getRawY();
+                    startHeightDp = Math.round(
+                            row.getChildAt(0).getLayoutParams().height / dm.density);
                     return true;
-                case MotionEvent.ACTION_MOVE:
+                case MotionEvent.ACTION_MOVE: {
+                    AppWidgetHostView widget = (AppWidgetHostView) row.getChildAt(0);
                     int h = Math.max(MIN_HEIGHT_DP, Math.min(MAX_HEIGHT_DP,
                             startHeightDp + Math.round((ev.getRawY() - startY) / dm.density)));
                     if (h != widget.getLayoutParams().height) {
@@ -645,18 +651,18 @@ public class DashboardActivity extends AppCompatActivity {
                                 columnWidthDp(), h);
                     }
                     return true;
+                }
                 case MotionEvent.ACTION_UP:
-                case MotionEvent.ACTION_CANCEL:
+                case MotionEvent.ACTION_CANCEL: {
+                    AppWidgetHostView widget = (AppWidgetHostView) row.getChildAt(0);
                     int height = Math.round(widget.getLayoutParams().height / dm.density);
                     store.setSize(id, height);
                     // re-create the widget view: updateAppWidgetSize alone does
                     // not force the provider's RemoteViews to re-layout visually
                     AppWidgetProviderInfo info = widgets.getAppWidgetInfo(id);
                     if (info != null) {
-                        ViewGroup row = (ViewGroup) v.getParent();
                         row.removeViewAt(0);
-                        AppWidgetHostView fresh = host.createView(
-                                DashboardActivity.this, id, info);
+                        AppWidgetHostView fresh = host.createView(DashboardActivity.this, id, info);
                         fresh.updateAppWidgetSize(new Bundle(), columnWidthDp(),
                                 height, columnWidthDp(), height);
                         fresh.setLayoutParams(new FrameLayout.LayoutParams(
@@ -664,6 +670,7 @@ public class DashboardActivity extends AppCompatActivity {
                         row.addView(fresh, 0);
                     }
                     return true;
+                }
                 default:
                     return true;
             }

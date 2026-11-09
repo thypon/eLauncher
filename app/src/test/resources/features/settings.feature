@@ -107,6 +107,7 @@ Feature: Settings screen
     Given the settings screen is open
     When I toggle the dark mode switch
     Then the settings screen uses the dark theme
+    And the settings screen background matches the theme background
 
   Scenario: Settings rows use the launcher typography
     Given the settings screen is open

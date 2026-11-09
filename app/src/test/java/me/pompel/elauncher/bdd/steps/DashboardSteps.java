@@ -11,6 +11,7 @@ import io.cucumber.java.en.When;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
+import static org.junit.Assert.assertNotSame;
 import static org.junit.Assert.assertTrue;
 import static org.robolectric.Shadows.shadowOf;
 
@@ -329,5 +330,44 @@ public class DashboardSteps {
     @Then("the widget is rendered {int}dp tall")
     public void widgetRenderedTall(int dp) {
         assertEquals(dp, world.renderedRowHeightDp(0));
+    }
+
+    @When("I note the current widget view")
+    public void noteCurrentWidgetView() {
+        world.noteInitialWidgetView();
+    }
+
+    @When("I drag the resize handle to {int}dp")
+    public void dragResizeHandleTo(int dp) {
+        world.dragResizeHandleTo(dp);
+    }
+
+    @Then("the widget row shows a fresh widget view")
+    public void widgetRowShowsFreshView() {
+        assertNotSame("the widget view must be re-created on release (the provider's "
+                        + "RemoteViews must re-layout at the new size)",
+                world.initialWidgetView(), world.boardWidgetView(0));
+    }
+
+    @Then("the fresh widget view is {int}dp tall")
+    public void freshWidgetViewTall(int dp) {
+        float density = world.density();
+        assertEquals((int) (dp * density), world.boardWidgetView(0).getLayoutParams().height);
+    }
+
+    @Given("the widget provider is unbound")
+    public void widgetProviderUnbound() {
+        world.forgetWidgetBinding(0);
+    }
+
+    @When("I watch the widget touches")
+    public void watchWidgetTouches() {
+        world.spyCurrentWidgetTouches();
+    }
+
+    @Then("the widget received the tap")
+    public void widgetReceivedTap() {
+        assertTrue("the hold proxy must forward taps to the CURRENT widget view "
+                + "(a released resize re-creates it)", world.widgetTouchSpied());
     }
 }

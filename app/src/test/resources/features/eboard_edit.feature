@@ -100,3 +100,36 @@ Feature: eBoard edit mode and widget adder
     And the widget is resized to 300dp
     Then the widget height is stored as 300dp
     And the widget is rendered 300dp tall
+
+  Scenario: Releasing a resize rebuilds the widget view
+    When I add a widget from the widget adder
+    And I long press the widget row
+    And I note the current widget view
+    And I drag the resize handle to 300dp
+    Then the widget row shows a fresh widget view
+    And the fresh widget view is 300dp tall
+
+  Scenario: Taps reach the widget after it was resized
+    When I add a widget from the widget adder
+    And I long press the widget row
+    And I drag the resize handle to 300dp
+    And I press the empty board space
+    And I watch the widget touches
+    And I tap the widget
+    Then the widget received the tap
+
+  Scenario: A second resize keeps the widget view up to date
+    When I add a widget from the widget adder
+    And I long press the widget row
+    And I drag the resize handle to 300dp
+    And I note the current widget view
+    And I drag the resize handle to 200dp
+    Then the widget row shows a fresh widget view
+    And the fresh widget view is 200dp tall
+
+  Scenario: Releasing a resize when the provider is gone does not crash
+    When I add a widget from the widget adder
+    And I long press the widget row
+    And the widget provider is unbound
+    And I drag the resize handle to 300dp
+    Then the widget height is stored as 300dp
