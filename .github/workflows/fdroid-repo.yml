@@ -61,7 +61,7 @@ jobs:
           echo "versionName=${VERSION_NAME} (tag ${TAG}, +${COUNT} commits), versionCode=${VERSION_CODE}"
 
       - name: Set up JDK 21
-        uses: actions/setup-java@v4 # c5195efecf7bdfc987ee8bae7a71cb8b11521c00
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0 # c5195efecf7bdfc987ee8bae7a71cb8b11521c00
         with:
           distribution: temurin
           java-version: '21'
