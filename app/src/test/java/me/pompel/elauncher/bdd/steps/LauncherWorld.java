@@ -1427,6 +1427,20 @@ public class LauncherWorld {
         return span[0];
     }
 
+    /** True when neither the row nor its grid cell clips the widget
+     * view: the widget must stay visible while a resize drag carries
+     * it past the column edge (the row only re-spans on release). */
+    public boolean rowNotClipped(int position) {
+        boolean[] ok = new boolean[1];
+        dashboardScenario.onActivity(a -> {
+            android.view.ViewGroup row =
+                    (android.view.ViewGroup) dashboard().boardRowAt(position);
+            android.view.ViewGroup cell = (android.view.ViewGroup) row.getParent();
+            ok[0] = !row.getClipChildren() && !cell.getClipChildren();
+        });
+        return ok[0];
+    }
+
     /** Horizontal resize drag through the DECOR: same stream as the vertical
      * variant, but the handle moves sideways. */
     public void dragResizeHandleWidthTo(int targetDp) {

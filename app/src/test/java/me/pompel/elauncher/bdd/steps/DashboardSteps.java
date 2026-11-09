@@ -287,6 +287,12 @@ public class DashboardSteps {
         assertEquals(world.dashboard().gridColumns(), world.rowSpan(0));
     }
 
+    @Then("the resized widget is not clipped to its column")
+    public void widgetNotClippedToColumn() {
+        assertTrue("the row must not clip the widget while it is dragged "
+                + "past the column", world.rowNotClipped(0));
+    }
+
     @Given("binding widgets is not allowed")
     public void bindingWidgetsNotAllowed() {
         world.allowWidgetBinding(false);

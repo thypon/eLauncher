@@ -34,6 +34,11 @@ Feature: eBoard edit mode and widget adder
     And the widget occupies the full board row
     And the widget width is stored as 250dp
 
+  Scenario: A widget resized across a column stays visible
+    When I add a widget from the widget adder
+    And I hold the widget row
+    Then the resized widget is not clipped to its column
+
   Scenario: Scrollable widget content scrolls inside the board
     When I add a widget from the widget adder
     And I load scrollable content into the widget
