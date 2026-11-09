@@ -588,6 +588,9 @@ public class DashboardActivity extends AppCompatActivity {
 
         FrameLayout row = new FrameLayout(this);
         row.setTag(id);
+        // the widget may be dragged wider than the row before the row
+        // re-spans: let it paint across the neighbor cell while dragging
+        row.setClipChildren(false);
         row.addView(widget);
 
         // (x) remove handle, iOS-manage-icons style, visible in edit mode:
@@ -915,6 +918,9 @@ public class DashboardActivity extends AppCompatActivity {
             ViewGroup old = (ViewGroup) row.getParent();
             if (old != null) old.removeView(row);
             holder.container.removeAllViews();
+            // a resize drag can carry the widget past the column edge
+            // before the row re-spans on release: never clip it
+            holder.container.setClipChildren(false);
             holder.container.addView(row, new ViewGroup.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, (int) dp(heightDpAt(position))));
         }
