@@ -2,5 +2,6 @@
 <resources>
     <item name="remove_handle" type="id" />
     <item name="resize_handle" type="id" />
+    <item name="reconfigure_handle" type="id" />
     <item name="hold_overlay" type="id" />
 </resources>

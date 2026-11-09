@@ -6,6 +6,8 @@
     <string name="dark_mode_title">Dark Mode</string>
     <string name="dark_mode_summary">Enable or disable dark mode</string>
     <string name="lock_portrait_title">Lock Portrait</string>
+    <string name="eboard_density_title">eBoard display size</string>
+    <string name="eboard_density_summary">Zoom the widget board: 100% matches the system display size.</string>
     <string name="lock_portrait_summary">Keep the launcher from rotating to landscape</string>
     <string name="gesture_title">Swipe Gestures</string>
     <string name="gesture_hint">Tap to pick app • \"Reset to Default\" in picker</string>

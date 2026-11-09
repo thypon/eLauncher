@@ -1649,6 +1649,24 @@ public class LauncherWorld {
         return span[0];
     }
 
+    /** Writes the eBoard density percent into the default shared
+     * preferences (the Settings screen stores it the same way). */
+    public void setEboardDensityPercent(int percent) {
+        androidx.preference.PreferenceManager
+                .getDefaultSharedPreferences(appContext())
+                .edit()
+                .putInt("eboard_density_preference", percent)
+                .apply();
+    }
+
+    /** The board grid column width in dp under the current density
+     * setting. */
+    public int boardColumnDp() {
+        int[] w = new int[1];
+        dashboardScenario.onActivity(a -> w[0] = dashboard().boardColumnDp());
+        return w[0];
+    }
+
     /** True when neither the row nor its grid cell clips the widget
      * view: the widget must stay visible while a resize drag carries
      * it past the column edge (the row only re-spans on release). */
@@ -2350,5 +2368,106 @@ public class LauncherWorld {
                     && o.getInt(android.appwidget.AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT) == h - 16;
         });
         return ok[0];
+    }
+
+    /** The reconfigure gear view id (0 before the fix ships: red runs
+     * must not fail to compile). */
+    private static int gearId(android.app.Activity a) {
+        return a.getResources().getIdentifier(
+                "reconfigure_handle", "id", a.getPackageName());
+    }
+
+    /** True when the placed widget shows its reconfigure gear. */
+    public boolean reconfigureHandleVisible(int position) {
+        boolean[] ref = new boolean[1];
+        dashboardScenario.onActivity(a -> {
+            // the fixture host may allocate id 0; findViewWithTag(0)
+            // would then match the row itself (the row tag is the id)
+            int gid = gearId(a);
+            View gear = gid == 0 ? null
+                    : dashboard().boardRowAt(position).findViewWithTag(gid);
+            ref[0] = gear != null && gear.getVisibility() == View.VISIBLE;
+        });
+        return ref[0];
+    }
+
+    /** Taps the reconfigure gear on the first row. */
+    public void tapReconfigureHandle() {
+        dashboardScenario.onActivity(a -> {
+            int gid = gearId(a);
+            View gear = gid == 0 ? null
+                    : dashboard().boardRowAt(0).findViewWithTag(gid);
+            if (gear == null) throw new AssertionError("no reconfigure handle");
+            gear.performClick();
+        });
+        idle();
+    }
+
+    /** The host was asked to configure the PLACED widget: a configure
+     * request whose id matches the stored binding (reconfigure must
+     * never touch a fresh id). */
+    public void reconfigureRequestedForPlacedWidget() {
+        int expected = storedBoardIds().get(0);
+        final org.robolectric.shadows.ShadowActivity.IntentForResult[] rec =
+                new org.robolectric.shadows.ShadowActivity.IntentForResult[1];
+        dashboardScenario.onActivity(a ->
+                rec[0] = org.robolectric.Shadows.shadowOf(a)
+                        .getNextStartedActivityForResult());
+        if (rec[0] == null) {
+            throw new AssertionError("no reconfigure request was started");
+        }
+        if (!android.appwidget.AppWidgetManager.ACTION_APPWIDGET_CONFIGURE
+                .equals(rec[0].intent.getAction())) {
+            throw new AssertionError("expected the widget configure intent, got "
+                    + rec[0].intent.getAction());
+        }
+        int id = rec[0].intent.getIntExtra(
+                android.appwidget.AppWidgetManager.EXTRA_APPWIDGET_ID, -1);
+        if (id != expected) {
+            throw new AssertionError("expected the placed widget id "
+                    + expected + ", got " + id);
+        }
+        lastConfigureIntent = rec[0].intent;
+    }
+
+    /** The preview of every kind card spans its cell (Launcher3's
+     * WidgetCell: the preview container fills the cell, not a fixed
+     * 128dp box). */
+    public void adderPreviewsFillCells() {
+        dashboardScenario.onActivity(a -> {
+            LinearLayout list = org.robolectric.shadows.ShadowDialog
+                    .getLatestDialog().findViewById(me.pompel.elauncher.R.id.adder_list);
+            int failures = 0;
+            for (View card : adderKindCells(list)) {
+                android.view.ViewGroup cell = (android.view.ViewGroup) card;
+                View preview = cell.getChildAt(0);
+                // the fix is the MATCH_PARENT contract (a laid-out-width
+                // comparison is layout-pass dependent in Robolectric:
+                // the table stretches cells after the first measure)
+                if (preview.getLayoutParams().width
+                        != android.view.ViewGroup.LayoutParams.MATCH_PARENT) {
+                    throw new AssertionError("the adder preview must fill its cell");
+                }
+            }
+            if (failures > 0) throw new AssertionError(
+                    failures + " adder previews do not fill their cells");
+        });
+    }
+
+    /** The kind descriptions wrap to three lines (Launcher3 caps the
+     * widget description at three lines). */
+    public void adderDescriptionsWrapToThreeLines() {
+        dashboardScenario.onActivity(a -> {
+            LinearLayout list = org.robolectric.shadows.ShadowDialog
+                    .getLatestDialog().findViewById(me.pompel.elauncher.R.id.adder_list);
+            int subId = a.getResources().getIdentifier("kind_sub", "id",
+                    a.getPackageName());
+            for (View card : adderKindCells(list)) {
+                TextView sub = ((android.view.ViewGroup) card).findViewById(subId);
+                if (sub == null || sub.getMaxLines() != 3) {
+                    throw new AssertionError("the kind description must wrap to three lines");
+                }
+            }
+        });
     }
 }
