@@ -501,4 +501,58 @@ public class DashboardSteps {
         assertTrue("the hold proxy must forward taps to the CURRENT widget view "
                 + "(a released resize re-creates it)", world.widgetTouchSpied());
     }
+
+    // ---- Launcher3 picker replication: span rows, sections, icons, bind options ----
+
+    @Given("the fixture app offers the kind {string} with dimensions {int}x{int}dp")
+    public void fixtureAppOffersKind(String label, int w, int h) {
+        world.addFixtureKind(label, w, h);
+    }
+
+    @Then("the kind {string} fills its adder row alone")
+    public void kindFillsRowAlone(String label) {
+        assertTrue("expected the kind " + label + " to fill its adder row alone",
+                world.adderKindRowSize(label) == 1);
+    }
+
+    @Then("the kinds {string} and {string} share an adder row")
+    public void kindsShareRow(String first, String second) {
+        assertTrue("expected " + first + " and " + second + " in one adder row",
+                world.adderKindsShareRow(first, second));
+    }
+
+    @Then("only the first app section is expanded")
+    public void onlyFirstSectionExpanded() {
+        java.util.List<String> expanded = world.adderExpandedSections();
+        assertTrue("expected exactly one expanded app section, got " + expanded,
+                expanded.size() == 1 && world.adderFirstSectionTitle().equals(expanded.get(0)));
+    }
+
+    @When("I tap the {string} adder header")
+    public void tapAdderHeader(String label) {
+        world.tapAdderHeader(label);
+    }
+
+    @Then("the {string} section is expanded")
+    public void sectionExpanded(String label) {
+        assertTrue("expected the " + label + " section to be expanded",
+                world.adderExpandedSections().contains(label));
+    }
+
+    @Then("the first app section is collapsed")
+    public void firstSectionCollapsed() {
+        assertTrue("expected the first app section to be collapsed",
+                !world.adderExpandedSections().contains(world.adderFirstSectionTitle()));
+    }
+
+    @Then("each app header shows the app icon")
+    public void headersShowAppIcon() {
+        assertTrue("expected app icons in every adder header", world.adderHeadersHaveIcons());
+    }
+
+    @Then("the widget was bound with {int}x{int}dp options")
+    public void boundWithOptions(int w, int h) {
+        assertTrue("expected the widget to be bound with " + w + "x" + h + "dp options",
+                world.boundWidgetOptions(0, w, h));
+    }
 }

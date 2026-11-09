@@ -1171,14 +1171,18 @@ public class LauncherWorld {
 
     /** Resource ids by name: the section/grid views ship with the fix, so
      * the pre-fix red run must still compile (same pattern as edit_hint). */
-    private int titleId() {
-        return appContext().getResources().getIdentifier(
+    private int titleId() {        return appContext().getResources().getIdentifier(
                 "adder_app_title", "id", appContext().getPackageName());
     }
 
     private int gridId() {
         return appContext().getResources().getIdentifier(
                 "adder_grid", "id", appContext().getPackageName());
+    }
+
+    private int iconId() {
+        return appContext().getResources().getIdentifier(
+                "adder_app_icon", "id", appContext().getPackageName());
     }
 
     /** App sections in the adder: children of adder_list that carry a
@@ -1229,9 +1233,9 @@ public class LauncherWorld {
             android.app.Dialog d = org.robolectric.shadows.ShadowDialog.getLatestDialog();
             android.view.ViewGroup list = d.findViewById(me.pompel.elauncher.R.id.adder_list);
             for (int i = 0; i < list.getChildCount() && cols[0] == -1; i++) {
-                android.widget.GridLayout grid = list.getChildAt(i).findViewById(
+                android.widget.TableLayout grid = list.getChildAt(i).findViewById(
                         gridId());
-                if (grid != null) cols[0] = grid.getColumnCount();
+                if (grid != null) cols[0] = 2; // fixed column budget of the adder table
             }
         });
         return cols[0];
@@ -2176,5 +2180,162 @@ public class LauncherWorld {
         } catch (android.content.pm.PackageManager.NameNotFoundException e) {
             throw new RuntimeException(e);
         }
+    }
+
+    // ---- Launcher3 picker replication helpers --------------------------------
+
+    /** Registers one more kind of the fixture provider (same package,
+     * different receiver) so it lands in the fixture app's adder section. */
+    public void addFixtureKind(String label, int minW, int minH) {
+        android.appwidget.AppWidgetProviderInfo info =
+                new android.appwidget.AppWidgetProviderInfo();
+        info.provider = new android.content.ComponentName(appContext().getPackageName(),
+                "me.fixtures.WidgetProvider$Kind" + label.hashCode());
+        info.label = label;
+        info.minWidth = minW;
+        info.minHeight = minH;
+        android.content.pm.ActivityInfo ai = new android.content.pm.ActivityInfo();
+        ai.packageName = appContext().getPackageName();
+        ai.nonLocalizedLabel = label;
+        try {
+            java.lang.reflect.Field f = android.appwidget.AppWidgetProviderInfo.class
+                    .getField("providerInfo");
+            f.set(info, ai);
+        } catch (Exception ignored) {
+        }
+        shadowOf(widgetManager()).addInstalledProvider(info);
+    }
+
+    /** Number of kind cards in the adder row that holds the kind with the
+     * given label (a wide kind alone = 1, two narrow kinds share a row = 2). */
+    public int adderKindRowSize(String label) {
+        int[] size = new int[] { -1 };
+        dashboardScenario.onActivity(a -> {
+            android.app.Dialog d = org.robolectric.shadows.ShadowDialog.getLatestDialog();
+            android.view.ViewGroup list = d.findViewById(me.pompel.elauncher.R.id.adder_list);
+            for (int i = 0; i < list.getChildCount(); i++) {
+                for (View cell : adderKindCells(list.getChildAt(i))) {
+                    TextView t = cell.findViewById(me.pompel.elauncher.R.id.kind_title);
+                    if (t != null && label.contentEquals(t.getText().toString())) {
+                        size[0] = ((android.view.ViewGroup) cell.getParent()).getChildCount();
+                        return;
+                    }
+                }
+            }
+        });
+        return size[0];
+    }
+
+    /** True when the two kinds live in the same adder row. */
+    public boolean adderKindsShareRow(String first, String second) {
+        boolean[] ok = new boolean[] { false };
+        dashboardScenario.onActivity(a -> {
+            android.app.Dialog d = org.robolectric.shadows.ShadowDialog.getLatestDialog();
+            android.view.ViewGroup list = d.findViewById(me.pompel.elauncher.R.id.adder_list);
+            android.view.ViewGroup rowFirst = null;
+            android.view.ViewGroup rowSecond = null;
+            for (int i = 0; i < list.getChildCount(); i++) {
+                for (View cell : adderKindCells(list.getChildAt(i))) {
+                    TextView t = cell.findViewById(me.pompel.elauncher.R.id.kind_title);
+                    if (t == null) continue;
+                    String text = t.getText().toString();
+                    if (first.contentEquals(text)) rowFirst = (android.view.ViewGroup) cell.getParent();
+                    if (second.contentEquals(text)) rowSecond = (android.view.ViewGroup) cell.getParent();
+                }
+            }
+            ok[0] = rowFirst != null && rowFirst == rowSecond;
+        });
+        return ok[0];
+    }
+
+    /** Titles of the app sections whose kind grid is visible (expanded). */
+    public java.util.List<String> adderExpandedSections() {
+        java.util.List<String> out = new java.util.ArrayList<>();
+        dashboardScenario.onActivity(a -> {
+            android.app.Dialog d = org.robolectric.shadows.ShadowDialog.getLatestDialog();
+            android.view.ViewGroup list = d.findViewById(me.pompel.elauncher.R.id.adder_list);
+            for (int i = 0; i < list.getChildCount(); i++) {
+                android.view.ViewGroup section = (android.view.ViewGroup) list.getChildAt(i);
+                TextView t = section.findViewById(titleId());
+                View grid = section.findViewById(me.pompel.elauncher.R.id.adder_grid);
+                if (t != null && grid != null && grid.getVisibility() == View.VISIBLE
+                        && ((android.view.ViewGroup) grid).getChildCount() > 0) {
+                    out.add(t.getText().toString());
+                }
+            }
+        });
+        return out;
+    }
+
+    /** App label of the first adder section. */
+    public String adderFirstSectionTitle() {
+        String[] out = new String[] { "" };
+        dashboardScenario.onActivity(a -> {
+            android.app.Dialog d = org.robolectric.shadows.ShadowDialog.getLatestDialog();
+            android.view.ViewGroup list = d.findViewById(me.pompel.elauncher.R.id.adder_list);
+            for (int i = 0; i < list.getChildCount(); i++) {
+                android.view.ViewGroup section = (android.view.ViewGroup) list.getChildAt(i);
+                TextView t = section.findViewById(titleId());
+                if (t != null) {
+                    out[0] = t.getText().toString();
+                    return;
+                }
+            }
+        });
+        return out[0];
+    }
+
+    /** Taps the header row of the app section with the given label. */
+    public void tapAdderHeader(String label) {
+        dashboardScenario.onActivity(a -> {
+            android.app.Dialog d = org.robolectric.shadows.ShadowDialog.getLatestDialog();
+            android.view.ViewGroup list = d.findViewById(me.pompel.elauncher.R.id.adder_list);
+            for (int i = 0; i < list.getChildCount(); i++) {
+                android.view.ViewGroup section = (android.view.ViewGroup) list.getChildAt(i);
+                TextView t = section.findViewById(titleId());
+                if (t != null && label.contentEquals(t.getText().toString())) {
+                    section.getChildAt(0).performClick();
+                    return;
+                }
+            }
+            throw new AssertionError("no adder header " + label);
+        });
+        idle();
+    }
+
+    /** True when every adder section header carries a non-empty app icon. */
+    public boolean adderHeadersHaveIcons() {
+        boolean[] ok = new boolean[] { true };
+        dashboardScenario.onActivity(a -> {
+            android.app.Dialog d = org.robolectric.shadows.ShadowDialog.getLatestDialog();
+            android.view.ViewGroup list = d.findViewById(me.pompel.elauncher.R.id.adder_list);
+            int sections = 0;
+            for (int i = 0; i < list.getChildCount(); i++) {
+                android.view.ViewGroup section = (android.view.ViewGroup) list.getChildAt(i);
+                TextView t = section.findViewById(titleId());
+                if (t == null) continue;
+                sections++;
+                android.widget.ImageView icon = section.findViewById(iconId());
+                if (icon == null || icon.getDrawable() == null) ok[0] = false;
+            }
+            if (sections == 0) ok[0] = false;
+        });
+        return ok[0];
+    }
+
+    /** True when the widget at the given board position was bound with the
+     * advised size options (AppWidgetManager.OPTION_APPWIDGET_MIN_*). */
+    public boolean boundWidgetOptions(int position, int w, int h) {
+        boolean[] ok = new boolean[] { false };
+        dashboardScenario.onActivity(a -> {
+            int id = storedBoardIds().get(position);
+            android.os.Bundle o = widgetManager().getAppWidgetOptions(id);
+            // the host view re-derives the final options from the laid-out
+            // advised size, subtracting the system widget padding (16px at
+            // density 1 in the Robolectric environment)
+            ok[0] = o.getInt(android.appwidget.AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH) == w - 16
+                    && o.getInt(android.appwidget.AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT) == h - 16;
+        });
+        return ok[0];
     }
 }
