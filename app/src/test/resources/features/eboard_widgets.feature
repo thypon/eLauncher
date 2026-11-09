@@ -10,9 +10,6 @@ Feature: eBoard widgets
   Scenario: A freshly opened board is empty
     Then the board shows the empty hint
 
-  Scenario: The board is offered as a launcher entry named eBoard
-    Then the launcher lists an "eBoard" entry
-
   Scenario: Adding a widget places it on the board
     When I tap the add widget button
     And the widget adder popover opens

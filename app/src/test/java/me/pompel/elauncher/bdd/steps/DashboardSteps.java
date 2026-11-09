@@ -161,9 +161,15 @@ public class DashboardSteps {
         assertEquals(2, world.adderGridColumns());
     }
 
-    @Then("the launcher lists an {string} entry")
-    public void launcherListsEntry(String label) {
-        assertTrue("expected a launcher entry labeled " + label, world.hasLauncherEntry(label));
+    @Then("no launcher lists an {string} entry")
+    public void noLauncherListsEntry(String label) {
+        assertFalse("expected no launcher entry labeled " + label, world.hasLauncherEntry(label));
+    }
+
+    @Then("the eBoard activity is not exported")
+    public void eboardActivityNotExported() {
+        assertFalse("eBoard must not be exported: no external caller may start it",
+                world.dashboardExported());
     }
 
     @When("I add a widget from the widget adder")

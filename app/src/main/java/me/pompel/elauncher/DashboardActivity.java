@@ -36,10 +36,11 @@ import androidx.recyclerview.widget.RecyclerView;
 
 /**
  * eBoard — a macOS-Dashboard-style board of persistent home screen widgets.
- * Registered as its own launcher entry point ("eBoard") and opened by the
- * launcher's default left-side gesture. Widgets picked from the widget adder
- * popover are hosted here for good: the AppWidgetHost binding is kept by the
- * system and the board order is persisted across restarts.
+ * Internal to the launcher (not exported, no launcher entry): opened by the
+ * launcher's default left-side gesture, any gesture assigned to it in the
+ * Settings picker, or in-app explicit intents only. Widgets picked from the
+ * widget adder popover are hosted here for good: the AppWidgetHost binding is
+ * kept by the system and the board order is persisted across restarts.
  *
  * Interaction model: the board lays widgets out in two columns; widget taps
  * reach the widgets themselves. Long press on empty board space opens the
