@@ -752,6 +752,11 @@ public class DashboardActivity extends AppCompatActivity {
                     // without this the RecyclerView steals the stream to
                     // scroll and the resize dies mid-gesture
                     row.getParent().requestDisallowInterceptTouchEvent(true);
+                    // the row re-spans only on release: until then the widget
+                    // paints past the cell, so lift the cell above its
+                    // neighbors or they cover the overflow
+                    ((View) row.getParent()).setTranslationZ(
+                            6f * getResources().getDisplayMetrics().density);
                     return true;
                 case MotionEvent.ACTION_MOVE: {
                     AppWidgetHostView widget = (AppWidgetHostView) row.getChildAt(0);
@@ -795,6 +800,7 @@ public class DashboardActivity extends AppCompatActivity {
                     }
                     // rebind the row so the span lookup re-evaluates the new
                     // width (a row resized past a column now spans the board)
+                    ((View) row.getParent()).setTranslationZ(0f);
                     int position = adapter.ids.indexOf(id);
                     if (position >= 0) adapter.notifyItemChanged(position);
                     return true;

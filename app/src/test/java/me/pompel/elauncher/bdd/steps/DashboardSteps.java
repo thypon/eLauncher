@@ -293,6 +293,17 @@ public class DashboardSteps {
                 + "past the column", world.rowNotClipped(0));
     }
 
+    @When("I start dragging the resize handle sideways to {int}dp")
+    public void startSideResize(int dp) {
+        world.beginSideResize(dp);
+    }
+
+    @Then("the resized row floats above the other rows")
+    public void resizeRowFloatsAbove() {
+        assertTrue("the dragged row's cell must paint above its neighbors",
+                world.resizeRowFloats());
+    }
+
     @Given("binding widgets is not allowed")
     public void bindingWidgetsNotAllowed() {
         world.allowWidgetBinding(false);
