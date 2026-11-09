@@ -40,10 +40,10 @@ Feature: Fling back out of the eBoard dashboard
     Then the eBoard dashboard animates out to the right
     And the home screen is visible
 
-  Scenario: A swipe up on the board closes it to the launcher
+  Scenario: Swiping up does not exit the board
     Given the eBoard dashboard is opened directly
     And I fling up on the eBoard dashboard
-    Then the home screen is visible
+    Then the eBoard dashboard stays open
 
   Scenario: A direct launch keeps horizontal flings inert
     Given the eBoard dashboard is opened directly

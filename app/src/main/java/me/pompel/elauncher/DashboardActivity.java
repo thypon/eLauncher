@@ -219,12 +219,6 @@ public class DashboardActivity extends AppCompatActivity {
                 @NonNull MotionEvent e2, float velocityX, float velocityY) {
             float xDiff = e2.getX() - e1.getX();
             float yDiff = e2.getY() - e1.getY();
-            // swiping up returns to the launcher (the "go back" gesture)
-            if (Math.abs(yDiff) > Math.abs(xDiff) && yDiff < 0
-                    && Math.abs(velocityY) > 100) {
-                exitToLauncher(0);
-                return true;
-            }
             if (entryDirection == 0 || editMode
                     || Math.abs(xDiff) <= Math.abs(yDiff)
                     || Math.abs(xDiff) <= 100 || Math.abs(velocityX) <= 100) {
