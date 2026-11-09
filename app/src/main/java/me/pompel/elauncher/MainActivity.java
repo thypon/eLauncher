@@ -82,7 +82,13 @@ public class MainActivity extends AppCompatActivity {
         PackageManager packageManager = getApplicationContext().getPackageManager();
         Intent intent = new Intent(Intent.ACTION_MAIN, null);
         intent.addCategory(Intent.CATEGORY_LAUNCHER);
-        for (ResolveInfo info : packageManager.queryIntentActivities(intent, 0)) appList.add(new App(info.loadLabel(packageManager).toString(), info.activityInfo.packageName));
+        for (ResolveInfo info : packageManager.queryIntentActivities(intent, 0)) {
+            // hide the launcher's own entries (the eLauncher home, the eBoard
+            // dashboard): both are reachable through gestures and settings,
+            // not the drawer
+            if (info.activityInfo.packageName.equals(getPackageName())) continue;
+            appList.add(new App(info.loadLabel(packageManager).toString(), info.activityInfo.packageName));
+        }
         appList.sort((app1, app2) -> app1.appName.toString().compareToIgnoreCase(app2.appName.toString()));
         for (App app : appList) {
             appNames.add(app.appName);

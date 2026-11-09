@@ -9,6 +9,7 @@ Feature: App drawer search
       | Palm  |
       | Calm  |
       | Beta  |
+      | Tent  |
     And the launcher is started
     And the app drawer is open
 
@@ -36,6 +37,17 @@ Feature: App drawer search
 
   Scenario: Search with no matches shows an empty drawer and launches nothing
     When I type "zzz" in the search field
+    Then the drawer shows no apps
+    And no app was auto-launched
+
+  Scenario: The launcher's own entries are hidden from the drawer
+    Then the drawer shows only "Beta", "Calm", "Palm" and "Tent"
+
+  Scenario: Searching for the launcher's own apps finds nothing
+    When I type "eb" in the search field
+    Then the drawer shows no apps
+    And no app was auto-launched
+    When I type "elauncher" in the search field
     Then the drawer shows no apps
     And no app was auto-launched
 

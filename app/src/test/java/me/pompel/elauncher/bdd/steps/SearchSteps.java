@@ -36,6 +36,27 @@ public class SearchSteps {
         assertEquals(expected, world.drawerLabels());
     }
 
+    @Then("the drawer shows only {string}, {string} and {string}")
+    public void drawerShowsOnlyThree(String first, String second, String third) {
+        List<String> expected = new ArrayList<>();
+        expected.add(first);
+        expected.add(second);
+        expected.add(third);
+        world.await(() -> expected.equals(world.drawerLabels()));
+        assertEquals(expected, world.drawerLabels());
+    }
+
+    @Then("the drawer shows only {string}, {string}, {string} and {string}")
+    public void drawerShowsOnlyFour(String first, String second, String third, String fourth) {
+        List<String> expected = new ArrayList<>();
+        expected.add(first);
+        expected.add(second);
+        expected.add(third);
+        expected.add(fourth);
+        world.await(() -> expected.equals(world.drawerLabels()));
+        assertEquals(expected, world.drawerLabels());
+    }
+
     @Then("{string}, {string} and {string} are all shown in the drawer")
     public void drawerShowsAll(String a, String b, String c) {
         List<String> expected = new ArrayList<>();

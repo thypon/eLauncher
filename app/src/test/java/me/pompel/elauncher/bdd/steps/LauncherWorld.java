@@ -2165,4 +2165,16 @@ public class LauncherWorld {
         });
         return color[0];
     }
+
+    /** The eBoard dashboard must be internal: not exported, so no other app
+     * can start it, and without a MAIN/LAUNCHER filter, so no launcher lists it. */
+    public boolean dashboardExported() {
+        android.content.ComponentName cn = new android.content.ComponentName(
+                appContext(), me.pompel.elauncher.DashboardActivity.class);
+        try {
+            return appContext().getPackageManager().getActivityInfo(cn, 0).exported;
+        } catch (android.content.pm.PackageManager.NameNotFoundException e) {
+            throw new RuntimeException(e);
+        }
+    }
 }

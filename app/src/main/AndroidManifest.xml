@@ -49,16 +49,10 @@
 
         <activity
             android:name=".DashboardActivity"
-            android:exported="true"
+            android:exported="false"
             android:icon="@mipmap/ic_eboard"
             android:label="eBoard"
-            android:roundIcon="@mipmap/ic_eboard_round" >
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-        </activity>
+            android:roundIcon="@mipmap/ic_eboard_round" />
 
         <receiver android:name=".UnlockReceiver"
             android:exported="false">

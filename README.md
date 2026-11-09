@@ -20,7 +20,7 @@ eLauncher favours easy readibility on eInk/ePaper devices, such as the Onyx Boox
 - Type to search in app drawer, if only one result is left, it is automatically launched (like OLauncher)
 - Gestures: swipe down for notification center, left/right swipe to launch any app (configurable in Settings), double tap to open the original launcher
 - Customizable swipe gestures: pick any app — or the built-in eBoard dashboard — for the left and right swipe via Settings
-- eBoard: a macOS-Snow-Leopard-style dashboard of persistent widgets, also registered as its own launcher entry named "eBoard" and opened by the default left swipe
+- eBoard: a macOS-Snow-Leopard-style dashboard of persistent widgets, opened by the default left swipe (internal to the launcher: it has no launcher entry of its own and is not listed in the app drawer or search)
 - Hold on empty space to change the number of apps on homescreen
 
 ## apk size differences with OLauncher Light
