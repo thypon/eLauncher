@@ -698,6 +698,31 @@ public class LauncherWorld {
         return visible[0];
     }
 
+    /** Dispatches the system home action at the launcher, like pressing the
+     * home button while the board is showing. */
+    public void callHomeLauncher() {
+        Intent home = new Intent(Intent.ACTION_MAIN)
+                .addCategory(Intent.CATEGORY_HOME)
+                .setPackage(appContext().getPackageName())
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        appContext().startActivity(home);
+        idle();
+    }
+
+    /** The home entry must declare singleTask: a home invocation then lands on
+     * the existing main view instance and clears whatever sits above it (the
+     * board, settings), instead of surfacing the board again. */
+    public boolean mainActivityIsSingleTask() {
+        android.content.pm.ActivityInfo info;
+        try {
+            info = appContext().getPackageManager().getActivityInfo(
+                    new android.content.ComponentName(appContext(), MainActivity.class), 0);
+        } catch (android.content.pm.PackageManager.NameNotFoundException e) {
+            throw new AssertionError("main activity not found", e);
+        }
+        return info.launchMode == android.content.pm.ActivityInfo.LAUNCH_SINGLE_TASK;
+    }
+
     /** Adapter data labels in drawer order. */
     public List<String> drawerLabels() {
         List<String> labels = new ArrayList<>();

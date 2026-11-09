@@ -56,3 +56,9 @@ Feature: Fling back out of the eBoard dashboard
     And I fling right on the eBoard dashboard
     When I press back on the eBoard dashboard
     Then the home screen is visible
+
+  Scenario: Calling home leaves the eBoard for the main view
+    Given the eBoard dashboard is opened directly
+    When I call the home launcher
+    Then the home screen is visible
+    And the main view reclaims the home task over the board
