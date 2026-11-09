@@ -364,8 +364,7 @@ public class DashboardSteps {
 
     @When("I select the {string} widget kind")
     public void selectNamedWidgetKind(String label) {
-        world.clickAdderKind(label);
-    }
+        world.clickAdderKind(label);    }
 
     @When("I dismiss the widget adder popover")
     public void dismissWidgetAdder() {
@@ -554,5 +553,15 @@ public class DashboardSteps {
     public void boundWithOptions(int w, int h) {
         assertTrue("expected the widget to be bound with " + w + "x" + h + "dp options",
                 world.boundWidgetOptions(0, w, h));
+    }
+
+    @Then("the host allocated one widget id")
+    public void hostAllocatedOneId() {
+        assertEquals(1, world.hostAllocations());
+    }
+
+    @Then("the configuration is requested through the widget host")
+    public void configurationThroughHost() {
+        assertEquals(1, world.hostConfigureRequests());
     }
 }

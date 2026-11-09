@@ -78,10 +78,23 @@ public class LauncherWorld {
         } catch (Exception e) {
             // no app widget manager in this scenario's sandbox: nothing to clean
         }
+        me.pompel.elauncher.unit.ShadowConfigureHost.resetAllocations();
     }
 
     public Context appContext() {
         return androidx.test.core.app.ApplicationProvider.getApplicationContext();
+    }
+
+    /** Allocation count of the app widget host in this scenario (the stock
+     * shadow scripts one id; the counting subclass records every call). */
+    public int hostAllocations() {
+        return me.pompel.elauncher.unit.ShadowConfigureHost.allocations();
+    }
+
+    /** Configure launches that went through AppWidgetHost (the framework
+     * path the system service backs on device). */
+    public int hostConfigureRequests() {
+        return me.pompel.elauncher.unit.ShadowConfigureHost.configureRequests();
     }
 
     /** Registers fake launchable apps (label → com.fixtures.<lowercase>) in the package manager.
