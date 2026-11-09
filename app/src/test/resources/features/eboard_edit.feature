@@ -39,6 +39,12 @@ Feature: eBoard edit mode and widget adder
     And I hold the widget row
     Then the resized widget is not clipped to its column
 
+  Scenario: The row being resized paints above the other rows
+    Given the board has 2 widgets
+    When I long press the widget row
+    And I start dragging the resize handle sideways to 250dp
+    Then the resized row floats above the other rows
+
   Scenario: Scrollable widget content scrolls inside the board
     When I add a widget from the widget adder
     And I load scrollable content into the widget

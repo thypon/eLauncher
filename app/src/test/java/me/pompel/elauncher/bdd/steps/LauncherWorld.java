@@ -1444,6 +1444,13 @@ public class LauncherWorld {
     /** Horizontal resize drag through the DECOR: same stream as the vertical
      * variant, but the handle moves sideways. */
     public void dragResizeHandleWidthTo(int targetDp) {
+        beginSideResize(targetDp);
+        endSideResize();
+    }
+
+    /** Starts a sideways resize drag and holds it (no release): the drag
+     * state stays live so mid-drag view state can be asserted. */
+    public void beginSideResize(int targetDp) {
         dashboardScenario.onActivity(a -> {
             android.view.ViewGroup row =
                     (android.view.ViewGroup) dashboard().boardRowAt(0);
@@ -1473,10 +1480,38 @@ public class LauncherWorld {
                     base, base + 10, android.view.MotionEvent.ACTION_MOVE, x0 + dx / 2, y, 0));
             decor.dispatchTouchEvent(android.view.MotionEvent.obtain(
                     base, base + 16, android.view.MotionEvent.ACTION_MOVE, x0 + dx, y, 0));
-            decor.dispatchTouchEvent(android.view.MotionEvent.obtain(
-                    base, base + 22, android.view.MotionEvent.ACTION_UP, x0 + dx, y, 0));
+            sideResizeUp[0] = x0 + dx;
+            sideResizeUp[1] = y;
         });
         idle();
+    }
+
+    private final float[] sideResizeUp = new float[2];
+
+    /** Releases a drag started with beginSideResize. */
+    public void endSideResize() {
+        dashboardScenario.onActivity(a -> {
+            View decor = a.getWindow().getDecorView();
+            long now = android.os.SystemClock.uptimeMillis();
+            decor.dispatchTouchEvent(android.view.MotionEvent.obtain(
+                    now, now, android.view.MotionEvent.ACTION_UP,
+                    sideResizeUp[0], sideResizeUp[1], 0));
+        });
+        idle();
+    }
+
+    /** True while a sideways resize drag is live and the dragged row's
+     * grid cell paints above the other rows (the overflowing widget must
+     * not be covered by the neighbor cell). */
+    public boolean resizeRowFloats() {
+        boolean[] ok = new boolean[1];
+        dashboardScenario.onActivity(a -> {
+            android.view.ViewGroup row =
+                    (android.view.ViewGroup) dashboard().boardRowAt(0);
+            android.view.ViewGroup cell = (android.view.ViewGroup) row.getParent();
+            ok[0] = cell.getTranslationZ() > 0f;
+        });
+        return ok[0];
     }
 
     /** Seeds the board store directly (ids only, no binding) — for stale-widget scenarios. */
