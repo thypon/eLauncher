@@ -8,6 +8,24 @@ Feature: eBoard edit mode and widget adder
     Given a "Digital" widget provider offering "A digital clock widget" is installed
     And the eBoard is started
 
+  Scenario: Dragging the resize handle sideways resizes the widget width
+    When I add a widget from the widget adder
+    And I hold the widget row
+    And I drag the resize handle sideways to 120dp
+    Then the widget is rendered 120dp wide
+
+  Scenario: A new widget appears at its provider's advised size
+    When the widget provider advises a maximum size of 140x280dp
+    And I add a widget from the widget adder
+    Then the widget is rendered 140dp wide
+    And the widget is rendered 280dp tall
+
+  Scenario: Scrollable widget content scrolls inside the board
+    When I add a widget from the widget adder
+    And I load scrollable content into the widget
+    And I scroll inside the widget
+    Then the widget content has scrolled
+
   Scenario: The add button exists only on an empty board
     Then the add widget button is visible
     When I add a widget from the widget adder

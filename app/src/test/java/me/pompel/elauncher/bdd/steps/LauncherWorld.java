@@ -1021,6 +1021,10 @@ public class LauncherWorld {
     /** Registers a fake app widget provider with the shadow AppWidgetManager;
      * the label (popover title) and description (popover kind line) can be
      * set for the widget-adder scenarios. */
+    /** The AppWidgetProviderInfo of the fixture provider, kept so tests can
+     * mutate its advised size fields after install. */
+    private android.appwidget.AppWidgetProviderInfo widgetInfo;
+
     public void installWidgetProvider(String label, String description) {
         widgetProvider = new android.content.ComponentName(appContext().getPackageName(),
                 "me.fixtures.WidgetProvider");
@@ -1046,6 +1050,19 @@ public class LauncherWorld {
             // no descriptionRes field: popover falls back to the app name
         }
         shadowOf(widgetManager()).addInstalledProvider(info);
+        widgetInfo = info;
+    }
+
+    /** Advises a maximum size for the fixture provider (dp): the widget
+     * should first appear at this "biggest variant, smallest pixels" size. */
+    public void adviseProviderSize(int widthDp, int heightDp) {
+        if (widgetInfo == null) throw new AssertionError("no fixture provider installed");
+        widgetInfo.maxResizeWidth = widthDp;
+        widgetInfo.maxResizeHeight = heightDp;
+        widgetInfo.minWidth = widthDp;
+        widgetInfo.minHeight = heightDp;
+        widgetInfo.minResizeWidth = 0;
+        widgetInfo.minResizeHeight = 0;
     }
 
     public void allowWidgetBinding(boolean allowed) {
@@ -1358,6 +1375,86 @@ public class LauncherWorld {
         return h[0];
     }
 
+    /** Rendered width of the widget view of a row, in dp: board child is the
+     * item container, its child the row, the row's first child the widget. */
+    public int renderedRowWidthDp(int position) {
+        int[] w = new int[1];
+        dashboardScenario.onActivity(a -> {
+            android.view.ViewGroup board = (android.view.ViewGroup) a
+                    .findViewById(me.pompel.elauncher.R.id.board);
+            float density = a.getResources().getDisplayMetrics().density;
+            View container = board.getChildAt(position);
+            View widget = null;
+            if (container instanceof android.view.ViewGroup) {
+                View row = ((android.view.ViewGroup) container).getChildAt(0);
+                if (row instanceof android.view.ViewGroup) {
+                    widget = ((android.view.ViewGroup) row).getChildAt(0);
+                }
+            }
+            w[0] = widget == null ? -1 : Math.round(widget.getWidth() / density);
+        });
+        return w[0];
+    }
+
+    /** Persisted row width in dp for a widget id. */
+    public int storedWidth(int position) {
+        int id = storedBoardIds().get(position);
+        // reads the widths map directly: the store API ships with the fix
+        String raw = appContext()
+                .getSharedPreferences(me.pompel.elauncher.BoardStore.PREFS_FILE,
+                        Context.MODE_PRIVATE)
+                .getString("widget_widths", "");
+        for (String part : raw.split(",")) {
+            int eq = part.indexOf('=');
+            if (eq > 0 && part.substring(0, eq).trim().equals(String.valueOf(id))) {
+                try {
+                    return Integer.parseInt(part.substring(eq + 1).trim());
+                } catch (NumberFormatException e) {
+                    return -1;
+                }
+            }
+        }
+        return 0;
+    }
+
+    /** Horizontal resize drag through the DECOR: same stream as the vertical
+     * variant, but the handle moves sideways. */
+    public void dragResizeHandleWidthTo(int targetDp) {
+        dashboardScenario.onActivity(a -> {
+            android.view.ViewGroup row =
+                    (android.view.ViewGroup) dashboard().boardRowAt(0);
+            View handle = row.findViewWithTag(me.pompel.elauncher.R.id.resize_handle);
+            if (handle == null) throw new AssertionError("no resize handle: enter edit mode first");
+            int startDp = dashboard().rowWidthDp(0);
+            float density = a.getResources().getDisplayMetrics().density;
+            androidx.recyclerview.widget.RecyclerView board =
+                    a.findViewById(me.pompel.elauncher.R.id.board);
+            View parent = (View) board.getParent();
+            int w = Math.max(1, parent.getWidth());
+            int h = Math.max(1, parent.getHeight());
+            board.measure(
+                    View.MeasureSpec.makeMeasureSpec(w, View.MeasureSpec.EXACTLY),
+                    View.MeasureSpec.makeMeasureSpec(h, View.MeasureSpec.EXACTLY));
+            board.layout(0, 0, w, h);
+            View decor = a.getWindow().getDecorView();
+            int[] hl = new int[2]; handle.getLocationOnScreen(hl);
+            int[] dl = new int[2]; decor.getLocationOnScreen(dl);
+            float x0 = hl[0] - dl[0] + handle.getWidth() / 2f;
+            float y = hl[1] - dl[1] + handle.getHeight() / 2f;
+            float dx = (targetDp - startDp) * density;
+            long base = android.os.SystemClock.uptimeMillis();
+            decor.dispatchTouchEvent(android.view.MotionEvent.obtain(
+                    base, base, android.view.MotionEvent.ACTION_DOWN, x0, y, 0));
+            decor.dispatchTouchEvent(android.view.MotionEvent.obtain(
+                    base, base + 10, android.view.MotionEvent.ACTION_MOVE, x0 + dx / 2, y, 0));
+            decor.dispatchTouchEvent(android.view.MotionEvent.obtain(
+                    base, base + 16, android.view.MotionEvent.ACTION_MOVE, x0 + dx, y, 0));
+            decor.dispatchTouchEvent(android.view.MotionEvent.obtain(
+                    base, base + 22, android.view.MotionEvent.ACTION_UP, x0 + dx, y, 0));
+        });
+        idle();
+    }
+
     /** Seeds the board store directly (ids only, no binding) — for stale-widget scenarios. */
     public void seedBoardIds(int... ids) {
         StringBuilder sb = new StringBuilder();
@@ -1486,6 +1583,92 @@ public class LauncherWorld {
             ref[0] = row.getChildAt(0);
         });
         return ref[0];
+    }
+
+    /** Pushes a RemoteViews layout containing a tall ScrollView into the
+     * fixture widget, exactly as a provider update would. */
+    public void pushScrollableWidgetContent(int position) {
+        dashboardScenario.onActivity(a -> {
+            android.appwidget.AppWidgetHostView host =
+                    (android.appwidget.AppWidgetHostView) boardWidgetView(position);
+            android.widget.RemoteViews rv = new android.widget.RemoteViews(
+                    appContext().getPackageName(),
+                    me.pompel.elauncher.R.layout.widget_scroll_fixture);
+            host.updateAppWidget(rv);
+        });
+        idle();
+    }
+
+    private static String describe(View v) {
+        StringBuilder sb = new StringBuilder(v.getClass().getSimpleName());
+        if (v instanceof android.view.ViewGroup) {
+            android.view.ViewGroup g = (android.view.ViewGroup) v;
+            for (int i = 0; i < g.getChildCount(); i++) {
+                sb.append(" > ").append(describe(g.getChildAt(i)));
+            }
+        }
+        return sb.toString();
+    }
+
+    /** Scrolls inside the widget view: a vertical swipe dispatched through
+     * the decor so the full touch pipeline (overlay, row, board) sees it. */
+    public void scrollInsideWidget(int position, int dyPx) {
+        dashboardScenario.onActivity(a -> {
+            androidx.recyclerview.widget.RecyclerView board =
+                    a.findViewById(me.pompel.elauncher.R.id.board);
+            View parent = (View) board.getParent();
+            int w = Math.max(1, parent.getWidth());
+            int h = Math.max(1, parent.getHeight());
+            board.measure(
+                    View.MeasureSpec.makeMeasureSpec(w, View.MeasureSpec.EXACTLY),
+                    View.MeasureSpec.makeMeasureSpec(h, View.MeasureSpec.EXACTLY));
+            board.layout(0, 0, w, h);
+            View widget = ((android.view.ViewGroup) dashboard().boardRowAt(position))
+                    .getChildAt(0);
+            widget = ((android.view.ViewGroup) widget).getChildAt(0); // row → widget
+            int[] wl = new int[2]; widget.getLocationOnScreen(wl);
+            View decor = a.getWindow().getDecorView();
+            int[] dl = new int[2]; decor.getLocationOnScreen(dl);
+            float x = wl[0] - dl[0] + widget.getWidth() / 2f;
+            float y0 = wl[1] - dl[1] + widget.getHeight() / 2f;
+            float y1 = y0 - dyPx;
+            long base = android.os.SystemClock.uptimeMillis();
+            decor.dispatchTouchEvent(android.view.MotionEvent.obtain(
+                    base, base, android.view.MotionEvent.ACTION_DOWN, x, y0, 0));
+            decor.dispatchTouchEvent(android.view.MotionEvent.obtain(
+                    base, base + 16, android.view.MotionEvent.ACTION_MOVE, x, (y0 + y1) / 2, 0));
+            decor.dispatchTouchEvent(android.view.MotionEvent.obtain(
+                    base, base + 32, android.view.MotionEvent.ACTION_MOVE, x, y1, 0));
+            decor.dispatchTouchEvent(android.view.MotionEvent.obtain(
+                    base, base + 48, android.view.MotionEvent.ACTION_UP, x, y1, 0));
+        });
+        idle();
+    }
+
+    /** Vertical scroll position of the widget's inner scrollable content. */
+    public int widgetInnerScrollTop(int position) {
+        int[] ref = new int[1];
+        dashboardScenario.onActivity(a -> {
+            View widget = boardWidgetView(position);
+            int[] top = {findScrollTop(widget)};
+            ref[0] = top[0];
+        });
+        return ref[0];
+    }
+
+    private static int findScrollTop(View v) {
+        if (v instanceof android.widget.ScrollView
+                || v instanceof android.widget.AbsListView) {
+            return ((android.view.View) v).getScrollY();
+        }
+        if (v instanceof android.view.ViewGroup) {
+            android.view.ViewGroup g = (android.view.ViewGroup) v;
+            for (int i = 0; i < g.getChildCount(); i++) {
+                int t = findScrollTop(g.getChildAt(i));
+                if (t > 0) return t;
+            }
+        }
+        return 0;
     }
 
     /** Drives the resize handle touch stream (DOWN, MOVE to the target height,
