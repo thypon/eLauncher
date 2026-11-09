@@ -35,6 +35,18 @@ Feature: eBoard edit mode and widget adder
     Then edit mode is off
     And a widget row is on the board
 
+  Scenario: The adder popover can be reopened after use
+    When I add a widget from the widget adder
+    And I dismiss the widget adder popover
+    And I hold the empty board space
+    Then the widget adder popover opens again
+
+  Scenario: The add widget button opens the popover repeatedly
+    When I add a widget from the widget adder
+    And I remove the only widget row
+    And I tap the add widget button
+    Then the widget adder popover opens again
+
   Scenario: The board follows the theme background
     Given the dark mode preference is on
     And the eBoard is restarted
@@ -44,6 +56,10 @@ Feature: eBoard edit mode and widget adder
     When I add a widget from the widget adder
     And I add a widget from the widget adder
     Then the board shows widgets in two columns
+
+  Scenario: The widget view has a transparent background
+    When I add a widget from the widget adder
+    Then the widget view has a transparent background
 
   Scenario: Without binding permission the system confirmation appears
     Given binding widgets is not allowed
@@ -84,3 +100,36 @@ Feature: eBoard edit mode and widget adder
     And the widget is resized to 300dp
     Then the widget height is stored as 300dp
     And the widget is rendered 300dp tall
+
+  Scenario: Releasing a resize rebuilds the widget view
+    When I add a widget from the widget adder
+    And I long press the widget row
+    And I note the current widget view
+    And I drag the resize handle to 300dp
+    Then the widget row shows a fresh widget view
+    And the fresh widget view is 300dp tall
+
+  Scenario: Taps reach the widget after it was resized
+    When I add a widget from the widget adder
+    And I long press the widget row
+    And I drag the resize handle to 300dp
+    And I press the empty board space
+    And I watch the widget touches
+    And I tap the widget
+    Then the widget received the tap
+
+  Scenario: A second resize keeps the widget view up to date
+    When I add a widget from the widget adder
+    And I long press the widget row
+    And I drag the resize handle to 300dp
+    And I note the current widget view
+    And I drag the resize handle to 200dp
+    Then the widget row shows a fresh widget view
+    And the fresh widget view is 200dp tall
+
+  Scenario: Releasing a resize when the provider is gone does not crash
+    When I add a widget from the widget adder
+    And I long press the widget row
+    And the widget provider is unbound
+    And I drag the resize handle to 300dp
+    Then the widget height is stored as 300dp

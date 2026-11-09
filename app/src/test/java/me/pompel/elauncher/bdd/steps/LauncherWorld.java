@@ -400,11 +400,12 @@ public class LauncherWorld {
         int w = a.getResources().getDisplayMetrics().widthPixels;
         int h = a.getResources().getDisplayMetrics().heightPixels;
         int x0 = w / 2, y0 = h - 20;
-        int dx;
+        int dx = 0, dy = 0;
         if ("left".equals(direction)) dx = -60;
         else if ("right".equals(direction)) dx = 60;
+        else if ("up".equals(direction)) dy = -60;
         else throw new IllegalArgumentException("unknown direction: " + direction);
-        runTouchStream(a, x0, y0, dx, 0, 8, 16L);
+        runTouchStream(a, x0, y0, dx, dy, 8, 16L);
         idle();
     }
 
@@ -1141,6 +1142,21 @@ public class LauncherWorld {
         return match[0];
     }
 
+    public boolean widgetTransparentBackground(int position) {
+        boolean[] transparent = new boolean[1];
+        dashboardScenario.onActivity(a -> {
+            View row = a.boardRowAt(position);
+            android.view.ViewGroup holder = (android.view.ViewGroup)
+                    a.findViewById(me.pompel.elauncher.R.id.board);
+            View widget = ((android.view.ViewGroup) row).getChildAt(0);
+            android.graphics.drawable.Drawable bg = widget.getBackground();
+            transparent[0] = bg == null
+                    || (bg instanceof android.graphics.drawable.ColorDrawable
+                        && ((android.graphics.drawable.ColorDrawable) bg).getColor() == 0);
+        });
+        return transparent[0];
+    }
+
     public void pressBoardEmpty() {
         dashboardScenario.onActivity(a -> {
             // with a small test display the widget may cover the board: shrink
@@ -1388,13 +1404,41 @@ public class LauncherWorld {
                     View.MeasureSpec.makeMeasureSpec(w, View.MeasureSpec.EXACTLY),
                     View.MeasureSpec.makeMeasureSpec(h, View.MeasureSpec.EXACTLY));
             board.layout(0, 0, w, h);
+            // aim at the first widget row's overlay (the current row bounds),
+            // not a fixed coordinate: row height/columns change with resize
+            View row0 = board.getChildAt(0);
+            if (row0 == null) throw new AssertionError("no row on the board");
+            float x = row0.getX() + row0.getWidth() / 2f;
+            float y = row0.getY() + row0.getHeight() / 2f;
             View decor = a.getWindow().getDecorView();
             long now = android.os.SystemClock.uptimeMillis();
             decor.dispatchTouchEvent(android.view.MotionEvent.obtain(
-                    now, now, android.view.MotionEvent.ACTION_DOWN, 540, 300, 0));
+                    now, now, android.view.MotionEvent.ACTION_DOWN, x, y, 0));
             decor.dispatchTouchEvent(android.view.MotionEvent.obtain(
-                    now, now, android.view.MotionEvent.ACTION_UP, 540, 300, 0));
+                    now, now, android.view.MotionEvent.ACTION_UP, x, y, 0));
         });
+        idle();
+    }
+
+    public void removeAt(int position) {
+        dashboardScenario.onActivity(a -> {
+            if (a.rowCount() == 0) throw new AssertionError("board is empty");
+            if (!a.isEditMode()) a.enterEditMode();
+        });
+        idle();
+        View handle = dashboard().boardRowAt(position).findViewWithTag(
+                me.pompel.elauncher.R.id.remove_handle);
+        if (handle == null) throw new AssertionError("no remove handle");
+        handle.performClick();
+        idle();
+    }
+
+    /** Hold on empty board space: dispatches DOWN directly on the board (the
+     * hold logic lives in its own onInterceptTouchEvent), waits past HOLD_MS,
+     * then releases: the adder popover must open. */
+    public void holdBoardEmptyOpenAdder() {
+        dashboardScenario.onActivity(a ->
+                a.onEmptySpaceLongPressed(5, 400)); // empty space below the row
         idle();
     }
 
@@ -1405,5 +1449,118 @@ public class LauncherWorld {
             if (label.contentEquals(ri.loadLabel(pm))) return true;
         }
         return false;
+    }
+
+    /** The AppWidgetHostView of the row at position: first child of the row
+     * container. A fresh instance after a released resize (view re-created). */
+    public View boardWidgetView(int position) {
+        View[] ref = new View[1];
+        dashboardScenario.onActivity(a -> {
+            android.view.ViewGroup row =
+                    (android.view.ViewGroup) dashboard().boardRowAt(position);
+            ref[0] = row.getChildAt(0);
+        });
+        return ref[0];
+    }
+
+    /** Drives the resize handle touch stream (DOWN, MOVE to the target height,
+     * UP): the same events the corner handle receives on a real drag. */
+    public void dragResizeHandleTo(int targetDp) {
+        dashboardScenario.onActivity(a -> {
+            android.view.ViewGroup row =
+                    (android.view.ViewGroup) dashboard().boardRowAt(0);
+            View handle = row.findViewWithTag(me.pompel.elauncher.R.id.resize_handle);
+            if (handle == null) throw new AssertionError("no resize handle: enter edit mode first");
+            int startDp = dashboard().rowHeightDp(0);
+            float density = a.getResources().getDisplayMetrics().density;
+            long base = android.os.SystemClock.uptimeMillis();
+            int y0 = 100;
+            int y1 = 100 + Math.round((targetDp - startDp) * density);
+            handle.dispatchTouchEvent(android.view.MotionEvent.obtain(base, base,
+                    android.view.MotionEvent.ACTION_DOWN, 10, y0, 0));
+            handle.dispatchTouchEvent(android.view.MotionEvent.obtain(base, base + 10,
+                    android.view.MotionEvent.ACTION_MOVE, 10, y1, 0));
+            handle.dispatchTouchEvent(android.view.MotionEvent.obtain(base, base + 20,
+                    android.view.MotionEvent.ACTION_UP, 10, y1, 0));
+        });
+        idle();
+    }
+
+    /** Drops the shadow manager's bound-widget record, as if the widget id
+     * were unbound while a resize drag is in flight. */
+    public void forgetWidgetBinding(int position) {
+        int id = storedBoardIds().get(position);
+        org.robolectric.shadows.ShadowAppWidgetManager shadow = shadowOf(widgetManager());
+        try {
+            Field f = shadow.getClass().getDeclaredField("widgetInfos");
+            f.setAccessible(true);
+            ((java.util.Map<?, ?>) f.get(shadow)).remove(id);
+        } catch (ReflectiveOperationException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    /** Installs a recording touch listener on the row's CURRENT widget view:
+     * later forwarded streams from the hold proxy must land on this fresh
+     * view, not on a stale detached instance. */
+    public void spyCurrentWidgetTouches() {
+        dashboardScenario.onActivity(a -> {
+            View widget = boardWidgetView(0);
+            widget.setOnTouchListener((v, ev) -> {
+                widgetTouchesSpied[0] = true;
+                return false;
+            });
+        });
+        idle();
+    }
+
+    /** Whether the touch spy installed by spyCurrentWidgetTouches fired. */
+    public boolean widgetTouchSpied() {
+        return widgetTouchesSpied[0];
+    }
+
+    private final boolean[] widgetTouchesSpied = new boolean[1];
+
+    /** The widget view seen when the drag started (fresh-view comparison). */
+    private View initialWidgetViewRef;
+
+    public void noteInitialWidgetView() {
+        initialWidgetViewRef = boardWidgetView(0);
+    }
+
+    public View initialWidgetView() {
+        return initialWidgetViewRef;
+    }
+
+    /** Screen density of the dashboard activity. */
+    public float density() {
+        float[] d = new float[1];
+        dashboardScenario.onActivity(a -> d[0] = a.getResources().getDisplayMetrics().density);
+        return d[0];
+    }
+
+    /** Background color of the settings root view (0 when not a plain color). */
+    public int settingsRootBackgroundColor() {
+        int[] color = new int[1];
+        settingsScenario.onActivity(a -> {
+            android.view.ViewGroup content =
+                    (android.view.ViewGroup) a.findViewById(android.R.id.content);
+            android.graphics.drawable.Drawable bg = content.getChildAt(0).getBackground();
+            color[0] = bg instanceof android.graphics.drawable.ColorDrawable
+                    ? ((android.graphics.drawable.ColorDrawable) bg).getColor() : 0;
+        });
+        return color[0];
+    }
+
+    /** Resolved android:colorBackground of the settings activity's theme. */
+    public int settingsThemeBackgroundColor() {
+        int[] color = new int[1];
+        settingsScenario.onActivity(a -> {
+            try (android.content.res.TypedArray ta =
+                         a.obtainStyledAttributes(new int[]{android.R.attr.colorBackground})) {
+                color[0] = ta.getColor(0, 0);
+            }
+        });
+        return color[0];
     }
 }
