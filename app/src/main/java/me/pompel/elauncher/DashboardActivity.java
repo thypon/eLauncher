@@ -8,6 +8,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.Color;
+import android.graphics.drawable.Drawable;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
@@ -24,8 +25,10 @@ import android.view.Window;
 import androidx.annotation.NonNull;
 import android.widget.Button;
 import android.widget.FrameLayout;
-import android.widget.GridLayout;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
+import android.widget.TableLayout;
+import android.widget.TableRow;
 import android.widget.TextView;
 
 import androidx.appcompat.app.AlertDialog;
@@ -417,9 +420,25 @@ public class DashboardActivity extends AppCompatActivity {
             byApp.computeIfAbsent(info.provider.getPackageName(),
                     p -> new java.util.ArrayList<>()).add(info);
         }
+        boolean first = true;
         for (java.util.Map.Entry<String, java.util.List<AppWidgetProviderInfo>> e
                 : byApp.entrySet()) {
-            list.addView(adderSection(e.getKey(), e.getValue(), dm));
+            ViewGroup section = (ViewGroup) adderSection(e.getKey(), e.getValue(), dm);
+            list.addView(section);
+            // Launcher3 picker behavior: every app header stays visible,
+            // only one app's kinds are expanded at a time (first expanded)
+            ViewGroup headerRow = (ViewGroup) section.getChildAt(0);
+            headerRow.setOnClickListener(v -> {
+                for (int i = 0; i < list.getChildCount(); i++) {
+                    View s = list.getChildAt(i);
+                    expandAdderSection(s, s == section
+                            && s.findViewById(R.id.adder_grid).getVisibility()
+                                    != View.VISIBLE);
+                }
+            });
+            if (first) expandAdderSection(section, true);
+            else expandAdderSection(section, false);
+            first = false;
         }
         adderDialog = new AlertDialog.Builder(this).setView(content).create();
         adderDialog.show();
@@ -432,8 +451,23 @@ public class DashboardActivity extends AppCompatActivity {
         }
     }
 
-    /** One app section of the adder: an app header (name, kind count) over a
-     * two-column grid of widget kind cards (Launcher3 picker structure). */
+    /** Expands or collapses one app section (its kind grid) and updates the
+     * header toggle glyph (Launcher3 expand state). */
+    private void expandAdderSection(View section, boolean expand) {
+        View grid = section.findViewById(R.id.adder_grid);
+        grid.setVisibility(expand ? View.VISIBLE : View.GONE);
+        TextView toggle = section.findViewById(R.id.adder_toggle);
+        toggle.setText(expand ? "▾" : "▸");
+        if (!expand) return;
+        // fade the grid in like Launcher3's sheet entries
+        grid.setAlpha(0f);
+        grid.animate().alpha(1f).setDuration(120).start();
+    }
+
+    /** One app section of the adder: an app header (icon, name, kind count,
+     * expand toggle) over a table of widget kind cards. Kinds whose grid span
+     * covers the full column pair fill their own table row; narrower kinds
+     * share a row (Launcher3 WidgetsListTableViewHolderBinder structure). */
     private View adderSection(String pkg, java.util.List<AppWidgetProviderInfo> kinds,
             DisplayMetrics dm) {
         LinearLayout section = (LinearLayout) getLayoutInflater()
@@ -442,25 +476,85 @@ public class DashboardActivity extends AppCompatActivity {
         appTitle.setText(appLabel(pkg));
         TextView appCount = section.findViewById(R.id.adder_app_count);
         appCount.setText(getString(R.string.eboard_adder_count, kinds.size()));
-        GridLayout grid = section.findViewById(R.id.adder_grid);
+        ImageView appIcon = section.findViewById(R.id.adder_app_icon);
+        Drawable icon = appIcon(pkg);
+        if (icon != null) appIcon.setImageDrawable(icon);
+        else appIcon.setVisibility(View.GONE);
+        TableLayout grid = section.findViewById(R.id.adder_grid);
+
+        int columnPx = Math.round(columnWidthDp() * dm.density);
+        int cellPad = (int) dp(6);
+        TableRow row = null;
+        int spanBudget = 0;
         for (AppWidgetProviderInfo info : kinds) {
+            int span = kindSpan(info, dm);
+            if (span > spanBudget || row == null) {
+                row = new TableRow(this);
+                grid.addView(row, new TableLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT));
+                spanBudget = 2;
+            }
+            spanBudget -= span;
             View cell = getLayoutInflater().inflate(R.layout.widget_adder_cell, null);
-            // cells share the row width evenly (Launcher3 WidgetCell weight=1)
-            cell.setLayoutParams(new GridLayout.LayoutParams(
-                    GridLayout.spec(GridLayout.UNDEFINED, 1f),
-                    GridLayout.spec(GridLayout.UNDEFINED)));
+            // Launcher3 WidgetCell: preview container weight = cell span,
+            // so wider kinds get more room than their half-row neighbors
+            cell.setLayoutParams(new TableRow.LayoutParams(
+                    0, TableRow.LayoutParams.WRAP_CONTENT, span));
             TextView title = cell.findViewById(R.id.kind_title);
             title.setText(info.loadLabel(getPackageManager()));
             TextView sub = cell.findViewById(R.id.kind_sub);
             String kind = description(info);
             sub.setText(kind.isEmpty() ? appLabel(pkg) : appLabel(pkg) + " · " + kind);
             TextView dims = cell.findViewById(R.id.kind_dims);
-            dims.setText(getString(R.string.eboard_adder_dims, info.minWidth, info.minHeight));
-            fillPreview(cell.findViewById(R.id.kind_preview), info);
+            dims.setText(getString(R.string.eboard_adder_dims,
+                    kindSpanX(info, dm), kindSpanY(info, dm)));
+            View preview = cell.findViewById(R.id.kind_preview);
+            preview.getLayoutParams().width = span * columnPx - 2 * cellPad;
+            fillPreview((FrameLayout) preview, info);
             cell.setOnClickListener(v -> pickKind(info));
-            grid.addView(cell);
+            row.addView(cell);
         }
         return section;
+    }
+
+    /** Grid columns the kind occupies in the adder (Launcher3 spanX,
+     *  estimated from the declared minimum width: wider than a grid column
+     *  = the full column pair). */
+    private int kindSpan(AppWidgetProviderInfo info, DisplayMetrics dm) {
+        return info.minWidth > columnWidthDp() ? 2 : 1;
+    }
+
+    private int kindSpanX(AppWidgetProviderInfo info, DisplayMetrics dm) {
+        return kindSpan(info, dm);
+    }
+
+    private int kindSpanY(AppWidgetProviderInfo info, DisplayMetrics dm) {
+        return Math.max(1, Math.round(info.minHeight / columnWidthDp()));
+    }
+
+    private Drawable appIcon(String pkg) {
+        Drawable icon = null;
+        try {
+            icon = getPackageManager().getApplicationIcon(pkg);
+        } catch (Exception ignored) {
+        }
+        if (icon == null) {
+            // fall back to the widget receiver's icon, then to the launcher
+            // icon (test fixtures register receivers without app records)
+            for (AppWidgetProviderInfo i : widgets.getInstalledProviders()) {
+                if (pkg.equals(i.provider.getPackageName())) {
+                    try {
+                        icon = i.loadIcon(this, 0);
+                        break;
+                    } catch (Exception ignored) {
+                    }
+                }
+            }
+        }
+        return icon != null ? icon
+                : androidx.core.content.res.ResourcesCompat
+                        .getDrawable(getResources(), R.mipmap.ic_launcher, getTheme());
     }
 
     private String appLabel(String pkg) {
@@ -468,6 +562,10 @@ public class DashboardActivity extends AppCompatActivity {
             return getPackageManager().getApplicationLabel(
                     getPackageManager().getApplicationInfo(pkg, 0)).toString();
         } catch (Exception e) {
+            // fall back to the widget receiver's label (test fixtures)
+            for (AppWidgetProviderInfo i : widgets.getInstalledProviders()) {
+                if (pkg.equals(i.provider.getPackageName())) return i.loadLabel(getPackageManager());
+            }
             return pkg;
         }
     }
@@ -521,6 +619,13 @@ public class DashboardActivity extends AppCompatActivity {
     private void pickKind(AppWidgetProviderInfo info) {
         int id = host.allocateAppWidgetId();
         if (widgets.bindAppWidgetIdIfAllowed(id, info.provider)) {
+            // Launcher3 binds the widget with its advised size options so
+            // the provider sizes its first RemoteViews to the landing spot;
+            // options come from the bound info (the manager's authoritative
+            // record), not the picker cell's captured copy
+            widgets.updateAppWidgetOptions(id,
+                    advisedOptions(widgets.getAppWidgetInfo(id)));
+            System.out.println("DBGBIND after options=" + widgets.getAppWidgetOptions(id));
             beginAdd(id, info);
             closeAdder();
         } else {
@@ -532,6 +637,19 @@ public class DashboardActivity extends AppCompatActivity {
             startActivityForResult(bind, REQUEST_BIND);
             closeAdder(); // otherwise the popover scrim hides the system dialog
         }
+    }
+
+    /** AppWidget options carrying the advised size in dp (Launcher3 binds
+     * widgets with OPTION_APPWIDGET_MIN/MAX_* from the provider advice). */
+    private Bundle advisedOptions(AppWidgetProviderInfo info) {
+        int wDp = advisedWidthDp(info);
+        int hDp = advisedHeightDp(info);
+        Bundle options = new Bundle();
+        options.putInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, wDp);
+        options.putInt(AppWidgetManager.OPTION_APPWIDGET_MAX_WIDTH, wDp);
+        options.putInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, hDp);
+        options.putInt(AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT, hDp);
+        return options;
     }
 
     /** Launcher3-style add completion: a provider that declares a configure
@@ -587,6 +705,9 @@ public class DashboardActivity extends AppCompatActivity {
                 if (id != -1) host.deleteAppWidgetId(id);
                 return;
             }
+            // the system bind dialog did not carry our advised options
+            widgets.updateAppWidgetOptions(id, advisedOptions(
+                    widgets.getAppWidgetInfo(id)));
             beginAdd(id, widgets.getAppWidgetInfo(id));
         }
         if (requestCode == REQUEST_CONFIGURE) {

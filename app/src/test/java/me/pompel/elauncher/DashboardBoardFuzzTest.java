@@ -98,11 +98,12 @@ public class DashboardBoardFuzzTest {
         activity().findViewById(R.id.add_widget).performClick();
         Dialog dialog = ShadowDialog.getLatestDialog();
         if (dialog == null) throw new AssertionError("adder popover did not open");
-        android.widget.GridLayout grid = (android.widget.GridLayout) dialog
+        android.widget.TableLayout grid = (android.widget.TableLayout) dialog
                 .getWindow().getDecorView().findViewById(R.id.adder_grid);
         if (grid == null || grid.getChildCount() == 0)
             throw new AssertionError("no kinds in popover");
-        grid.getChildAt(0).performClick();
+        android.view.ViewGroup firstRow = (android.view.ViewGroup) grid.getChildAt(0);
+        firstRow.getChildAt(0).performClick();
         idle();
     }
 
