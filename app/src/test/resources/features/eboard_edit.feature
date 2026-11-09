@@ -12,7 +12,7 @@ Feature: eBoard edit mode and widget adder
     When I add a widget from the widget adder
     And I hold the widget row
     And I drag the resize handle sideways to 120dp
-    Then the widget is rendered 120dp wide
+    Then the widget is rendered 160dp wide
 
   Scenario: A new widget appears at its provider's advised size
     When the widget provider advises a maximum size of 140x280dp
@@ -30,9 +30,20 @@ Feature: eBoard edit mode and widget adder
     When I add a widget from the widget adder
     And I hold the widget row
     And I drag the resize handle sideways to 250dp
-    Then the widget is rendered 250dp wide
+    Then the widget is rendered 320dp wide
     And the widget occupies the full board row
-    And the widget width is stored as 250dp
+    And the widget width is stored as 320dp
+
+  Scenario: A released resize snaps to the widget grid
+    When I add a widget from the widget adder
+    And I hold the widget row
+    And I drag the resize handle to 175dp
+    Then the widget is rendered 200dp tall
+    And the widget height is stored as 200dp
+    And I drag the resize handle sideways to 250dp
+    Then the widget is rendered 320dp wide
+    And the widget width is stored as 320dp
+    And the widget occupies the full board row
 
   Scenario: A widget resized across a column stays visible
     When I add a widget from the widget adder
@@ -196,6 +207,25 @@ Feature: eBoard edit mode and widget adder
     Then the edit mode hint is hidden
     And I hold the widget row
     Then the edit mode hint explains resizing and removal
+
+  Scenario: A placed widget can be reconfigured
+    Given the widget kind requires configuration
+    When I add a widget from the widget adder
+    And the configuration succeeds
+    And I hold the widget row
+    Then the widget shows a reconfigure handle
+    And I note the current widget view
+    When I tap the reconfigure handle
+    Then the configuration is requested for the placed widget
+    When the configuration succeeds
+    Then the widget row shows a fresh widget view
+
+  Scenario: Widgets without configuration show no reconfigure handle
+    When I add a widget from the widget adder
+    And I hold the widget row
+    Then the widget shows no reconfigure handle
+
+  Scenario: Releasing a resize when the provider is gone does not crash
     When I add a widget from the widget adder
     And I long press the widget row
     And the widget provider is unbound

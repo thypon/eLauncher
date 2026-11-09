@@ -109,3 +109,9 @@ Feature: eBoard widgets
     When the widget provider advises a maximum size of 140x280dp
     And I add a widget from the widget adder
     Then the widget was bound with 140x280dp options
+
+  Scenario: The adder cards follow the launcher picker structure
+    When I tap the add widget button
+    And the widget adder popover opens
+    Then the adder previews fill their cells
+    And the adder descriptions wrap to three lines

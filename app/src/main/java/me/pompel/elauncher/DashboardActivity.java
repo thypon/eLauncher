@@ -60,6 +60,9 @@ public class DashboardActivity extends AppCompatActivity {
     private static final int REQUEST_PICK = 1;
     private static final int REQUEST_BIND = 2;
     private static final int REQUEST_CONFIGURE = 3;
+    /** Launcher3's REQUEST_RECONFIGURE_APPWIDGET: re-opening the
+     * configuration of an already-placed widget. */
+    private static final int REQUEST_RECONFIGURE = 13;
     private static final String STATE_PENDING_CONFIGURE_ID = "eboard.pendingConfigureId";
 
     /** The reserved app widget id whose configure screen is on screen
@@ -70,6 +73,10 @@ public class DashboardActivity extends AppCompatActivity {
     public static final int MIN_HEIGHT_DP = 140;
     public static final int MAX_HEIGHT_DP = 600;
     public static final int MIN_WIDTH_DP = 100;
+    /** Height of one grid cell: like Launcher3's non-continuous grid,
+     * released resizes snap to whole cells (columns of the full board
+     * width for width, this many dp for height). */
+    public static final int CELL_HEIGHT_DP = 100;
     /** Fallback height when the provider advises nothing. */
     public static final int DEFAULT_HEIGHT_DP = 200;
     /** Hold duration that enters edit mode / opens the adder. */
@@ -344,11 +351,34 @@ public class DashboardActivity extends AppCompatActivity {
         return ((GridLayoutManager) board.getLayoutManager()).getSpanCount();
     }
 
+    /** The board grid column width in dp under the current density
+     * setting (observation entry point for the density scenarios). */
+    public int boardColumnDp() {
+        return columnWidthDp();
+    }
+
     /** The span size the row's position occupies in the grid (1 = one
      * column, 2 = the full board row). */
     public int rowSpan(int position) {
         GridLayoutManager lm = (GridLayoutManager) board.getLayoutManager();
         return lm.getSpanSizeLookup().getSpanSize(position);
+    }
+
+    /** Re-creates the widget view of a placed row at its stored size:
+     * updateAppWidgetSize alone does not force the provider's
+     * RemoteViews to re-layout visually (used after a released resize
+     * and after a re-run configuration). */
+    private void recreateWidgetView(int id, AppWidgetProviderInfo info) {
+        FrameLayout row = (FrameLayout) adapter.rows.get(id);
+        if (row == null) return;
+        int width = store.hasWidth(id) ? store.width(id) : advisedWidthDp(info);
+        int height = store.hasSize(id) ? store.size(id) : advisedHeightDp(info);
+        row.removeViewAt(0);
+        AppWidgetHostView fresh = host.createView(plainWidgetContext(), id, info);
+        fresh.updateAppWidgetSize(new Bundle(), width, height, width, height);
+        fresh.setLayoutParams(new FrameLayout.LayoutParams(
+                (int) dp(width), (int) dp(height)));
+        row.addView(fresh, 0);
     }
 
     /** Reorders the board (drag-to-reorder lands here) and persists the order;
@@ -378,8 +408,8 @@ public class DashboardActivity extends AppCompatActivity {
         View widget = row.getChildAt(0);
         return Math.round(widget.getLayoutParams().width
                 == ViewGroup.LayoutParams.MATCH_PARENT
-                ? widget.getWidth() / getResources().getDisplayMetrics().density
-                : widget.getLayoutParams().width / getResources().getDisplayMetrics().density);
+                ? widget.getWidth() / boardDensity()
+                : widget.getLayoutParams().width / boardDensity());
     }
 
     /** Advised row height for a widget: its provider's maximum advised
@@ -401,9 +431,20 @@ public class DashboardActivity extends AppCompatActivity {
         return Math.max(MIN_WIDTH_DP, Math.min(boardWidthDp(), info.maxResizeWidth));
     }
 
+    /** Board density: the system density scaled by the eBoard DPI setting
+     * (a percent stored by the Settings screen; 100 = system density). All
+     * board geometry — sizes, drag math, adder cards — uses this so the
+     * setting zooms the whole board. */
+    private float boardDensity() {
+        int percent = androidx.preference.PreferenceManager
+                .getDefaultSharedPreferences(this)
+                .getInt("eboard_density_preference", 100);
+        return getResources().getDisplayMetrics().density * (percent / 100f);
+    }
+
     private int boardWidthDp() {
         DisplayMetrics dm = getResources().getDisplayMetrics();
-        return Math.round(dm.widthPixels / dm.density);
+        return Math.round(dm.widthPixels / boardDensity());
     }
 
     /** Called when a hold lands on empty board space (no widget underneath):
@@ -499,7 +540,7 @@ public class DashboardActivity extends AppCompatActivity {
         else appIcon.setVisibility(View.GONE);
         TableLayout grid = section.findViewById(R.id.adder_grid);
 
-        int columnPx = Math.round(columnWidthDp() * dm.density);
+        int columnPx = Math.round(columnWidthDp() * boardDensity());
         int cellPad = (int) dp(6);
         TableRow row = null;
         int spanBudget = 0;
@@ -527,7 +568,8 @@ public class DashboardActivity extends AppCompatActivity {
             dims.setText(getString(R.string.eboard_adder_dims,
                     kindSpanX(info, dm), kindSpanY(info, dm)));
             View preview = cell.findViewById(R.id.kind_preview);
-            preview.getLayoutParams().width = span * columnPx - 2 * cellPad;
+            // the preview fills the cell (MATCH_PARENT in the layout);
+            // the cell itself is weighted by its span in the table row
             fillPreview((FrameLayout) preview, info);
             cell.setOnClickListener(v -> pickKind(info));
             row.addView(cell);
@@ -683,13 +725,8 @@ public class DashboardActivity extends AppCompatActivity {
                 // U+ it is BAL-hardened unless the options grant the
                 // background-activity-start privilege — Launcher3 does the
                 // same via ActivityContext.makeDefaultActivityOptions
-                ActivityOptions options = ActivityOptions.makeBasic();
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                    options.setPendingIntentBackgroundActivityStartMode(
-                            ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED);
-                }
                 host.startAppWidgetConfigureActivityForResult(this, id, 0,
-                        REQUEST_CONFIGURE, options.toBundle());
+                        REQUEST_CONFIGURE, configureActivityOptions().toBundle());
             } catch (RuntimeException e) {
                 // ActivityNotFoundException / SecurityException: no usable
                 // configure activity, the reserved id must not leak
@@ -751,6 +788,17 @@ public class DashboardActivity extends AppCompatActivity {
                 // board stays as it was
                 host.deleteAppWidgetId(id);
             }
+        } else if (requestCode == REQUEST_RECONFIGURE) {
+            // re-running the configuration of a PLACED widget: a result
+            // re-creates the view so the provider's fresh settings apply;
+            // a cancel keeps the widget exactly as it was (no id delete —
+            // Launcher3 leaves placed widgets alone on reconfigure cancel)
+            if (id == -1) id = pendingConfigureId;
+            pendingConfigureId = AppWidgetManager.INVALID_APPWIDGET_ID;
+            AppWidgetProviderInfo info = id == -1 ? null : widgets.getAppWidgetInfo(id);
+            if (resultCode == RESULT_OK && info != null) {
+                recreateWidgetView(id, info);
+            }
         }
     }
 
@@ -760,6 +808,18 @@ public class DashboardActivity extends AppCompatActivity {
      * mode, an (x) remove handle and a corner resize handle. Taps reach the
      * widget itself; a hold enters edit mode through the board-level touch
      * listener, and the row long click does the same (BDD path). */
+    /** Options for configure-activity launches: on U+ the system-sender
+     * PendingIntent is BAL-hardened, so the background-activity-start
+     * privilege must be granted (Launcher3's allowBGLaunch). */
+    private ActivityOptions configureActivityOptions() {
+        ActivityOptions options = ActivityOptions.makeBasic();
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            options.setPendingIntentBackgroundActivityStartMode(
+                    ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED);
+        }
+        return options;
+    }
+
     /** A plain context for widget view creation: the activity context's
      * LayoutInflater carries the AppCompat view factory, and RemoteViews
      * reflection rejects the substituted classes it produces
@@ -839,6 +899,41 @@ public class DashboardActivity extends AppCompatActivity {
         resize.setVisibility(editMode ? View.VISIBLE : View.GONE);
         resize.setOnTouchListener(new ResizeTouchListener(id));
         row.addView(resize);
+
+        // reconfigure gear (bottom-left), only for kinds that declare a
+        // configure activity: it re-opens the configuration for the
+        // already-placed widget (Launcher3's REQUEST_RECONFIGURE flow)
+        boolean configurable = info != null && info.configure != null;
+        if (configurable) {
+            TextView gear = new TextView(this);
+            gear.setText("⚙");
+            gear.setTextColor(Color.WHITE);
+            gear.setTextSize(14);
+            gear.setGravity(Gravity.CENTER);
+            gear.setBackgroundResource(R.drawable.remove_badge);
+            gear.setTag(R.id.reconfigure_handle);
+            gear.setOnClickListener(v -> {
+                AppWidgetProviderInfo live = widgets.getAppWidgetInfo(id);
+                if (live == null || live.configure == null) return;
+                pendingConfigureId = id;
+                try {
+                    host.startAppWidgetConfigureActivityForResult(
+                            DashboardActivity.this, id, 0,
+                            REQUEST_RECONFIGURE, configureActivityOptions().toBundle());
+                } catch (RuntimeException e) {
+                    // unresolvable configure activity: keep the widget,
+                    // just forget the pending record
+                    pendingConfigureId = AppWidgetManager.INVALID_APPWIDGET_ID;
+                }
+            });
+            gear.setLayoutParams(new FrameLayout.LayoutParams(
+                    (int) dp(28), (int) dp(28), Gravity.BOTTOM | Gravity.START));
+            FrameLayout.LayoutParams gp = (FrameLayout.LayoutParams) gear.getLayoutParams();
+            gp.setMargins((int) dp(14), 0, 0, (int) dp(14));
+            gear.setElevation(dp(6));
+            gear.setVisibility(editMode ? View.VISIBLE : View.GONE);
+            row.addView(gear);
+        }
 
         // hold-to-edit proxy overlay: taps are forwarded to the widget itself
         // (clicks pass through), a 700ms hold enters edit mode (iOS style)
@@ -959,10 +1054,10 @@ public class DashboardActivity extends AppCompatActivity {
                     startWidthDp = Math.round(
                             row.getChildAt(0).getLayoutParams().width
                                     == ViewGroup.LayoutParams.MATCH_PARENT
-                                    ? row.getChildAt(0).getWidth() / dm.density
-                                    : row.getChildAt(0).getLayoutParams().width / dm.density);
+                                    ? row.getChildAt(0).getWidth() / boardDensity()
+                                    : row.getChildAt(0).getLayoutParams().width / boardDensity());
                     startHeightDp = Math.round(
-                            row.getChildAt(0).getLayoutParams().height / dm.density);
+                            row.getChildAt(0).getLayoutParams().height / boardDensity());
                     // the drag is vertical and crosses the scroll slop fast:
                     // without this the RecyclerView steals the stream to
                     // scroll and the resize dies mid-gesture
@@ -979,9 +1074,9 @@ public class DashboardActivity extends AppCompatActivity {
                     // spans the full board (the lookup re-spans on release)
                     int maxW = boardWidthDp();
                     int w = Math.max(MIN_WIDTH_DP, Math.min(maxW,
-                            startWidthDp + Math.round((ev.getRawX() - startX) / dm.density)));
+                            startWidthDp + Math.round((ev.getRawX() - startX) / boardDensity())));
                     int h = Math.max(MIN_HEIGHT_DP, Math.min(MAX_HEIGHT_DP,
-                            startHeightDp + Math.round((ev.getRawY() - startY) / dm.density)));
+                            startHeightDp + Math.round((ev.getRawY() - startY) / boardDensity())));
                     if (w != widget.getLayoutParams().width
                             || h != widget.getLayoutParams().height) {
                         widget.setLayoutParams(new FrameLayout.LayoutParams(
@@ -997,22 +1092,17 @@ public class DashboardActivity extends AppCompatActivity {
                 case MotionEvent.ACTION_UP:
                 case MotionEvent.ACTION_CANCEL: {
                     AppWidgetHostView widget = (AppWidgetHostView) row.getChildAt(0);
-                    int height = Math.round(widget.getLayoutParams().height / dm.density);
-                    int width = Math.round(widget.getLayoutParams().width / dm.density);
+                    int height = snapHeightDp(Math.round(
+                            widget.getLayoutParams().height / boardDensity()));
+                    int width = snapWidthDp(Math.round(
+                            widget.getLayoutParams().width / boardDensity()));
                     store.setSize(id, height);
                     store.setWidth(id, width);
-                    // re-create the widget view: updateAppWidgetSize alone does
-                    // not force the provider's RemoteViews to re-layout visually
+                    // re-create the widget view: updateAppWidgetSize alone
+                    // does not force the provider's RemoteViews to
+                    // re-layout visually
                     AppWidgetProviderInfo info = widgets.getAppWidgetInfo(id);
-                    if (info != null) {
-                        row.removeViewAt(0);
-                        AppWidgetHostView fresh = host.createView(plainWidgetContext(), id, info);
-                        fresh.updateAppWidgetSize(new Bundle(), width,
-                                height, width, height);
-                        fresh.setLayoutParams(new FrameLayout.LayoutParams(
-                                (int) dp(width), (int) dp(height)));
-                        row.addView(fresh, 0);
-                    }
+                    if (info != null) recreateWidgetView(id, info);
                     // rebind the row so the span lookup re-evaluates the new
                     // width (a row resized past a column now spans the board)
                     ((View) row.getParent()).setTranslationZ(0f);
@@ -1028,11 +1118,26 @@ public class DashboardActivity extends AppCompatActivity {
 
     private int columnWidthDp() {
         DisplayMetrics dm = getResources().getDisplayMetrics();
-        return Math.round(dm.widthPixels / 2f / dm.density);
+        return Math.round(dm.widthPixels / 2f / boardDensity());
+    }
+
+    /** Launcher3-style non-continuous grid: a released resize snaps to
+     * whole grid cells — width to whole columns (so a row never sits
+     * half-way across a column boundary), height to whole cell heights. */
+    private int snapWidthDp(int widthDp) {
+        int cell = Math.max(MIN_WIDTH_DP, columnWidthDp());
+        return Math.max(MIN_WIDTH_DP, Math.min(boardWidthDp(),
+                Math.max(1, Math.round(widthDp / (float) cell)) * cell));
+    }
+
+    private int snapHeightDp(int heightDp) {
+        return Math.max(MIN_HEIGHT_DP, Math.min(MAX_HEIGHT_DP,
+                Math.max(1, Math.round(heightDp / (float) CELL_HEIGHT_DP))
+                        * CELL_HEIGHT_DP));
     }
 
     private float dp(int value) {
-        return value * getResources().getDisplayMetrics().density;
+        return value * boardDensity();
     }
 
     /** Even spacing between the grid cells (the compact look). */
@@ -1072,8 +1177,10 @@ public class DashboardActivity extends AppCompatActivity {
             for (View row : rows.values()) {
                 View remove = row.findViewWithTag(R.id.remove_handle);
                 View resize = row.findViewWithTag(R.id.resize_handle);
+                View gear = row.findViewWithTag(R.id.reconfigure_handle);
                 if (remove != null) remove.setVisibility(on ? View.VISIBLE : View.GONE);
                 if (resize != null) resize.setVisibility(on ? View.VISIBLE : View.GONE);
+                if (gear != null) gear.setVisibility(on ? View.VISIBLE : View.GONE);
                 // the hold overlay sits above the handles; it must step aside
                 // in edit mode or it swallows every touch meant for them
                 View overlay = row.findViewWithTag(R.id.hold_overlay);
@@ -1097,7 +1204,7 @@ public class DashboardActivity extends AppCompatActivity {
                 AppWidgetHostView widget = (AppWidgetHostView) ((ViewGroup) row).getChildAt(0);
                 int width = widget.getLayoutParams().width == ViewGroup.LayoutParams.MATCH_PARENT
                         ? columnWidthDp()
-                        : Math.round(widget.getLayoutParams().width / dm.density);
+                        : Math.round(widget.getLayoutParams().width / boardDensity());
                 widget.setLayoutParams(new FrameLayout.LayoutParams(
                         (int) dp(width), (int) dp(heightDp)));
                 widget.updateAppWidgetSize(new Bundle(), width, heightDp,

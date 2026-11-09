@@ -11,9 +11,8 @@
 
     <FrameLayout
         android:id="@+id/kind_preview"
-        android:layout_width="128dp"
+        android:layout_width="match_parent"
         android:layout_height="96dp"
-        android:layout_gravity="center_horizontal"
         android:background="@drawable/preview_frame" />
 
     <TextView
@@ -38,7 +37,7 @@
         android:id="@+id/kind_sub"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:maxLines="1"
+        android:maxLines="3"
         android:ellipsize="end"
         android:textSize="11sp" />
 </LinearLayout>

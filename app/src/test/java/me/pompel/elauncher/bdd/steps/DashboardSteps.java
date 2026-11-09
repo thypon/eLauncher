@@ -330,6 +330,38 @@ public class DashboardSteps {
         assertEquals(world.dashboard().gridColumns(), world.rowSpan(0));
     }
 
+    @Then("the widget shows a reconfigure handle")
+    public void reconfigureHandleVisible() {
+        assertTrue("configurable widgets show a reconfigure gear in edit mode",
+                world.reconfigureHandleVisible(0));
+    }
+
+    @Then("the widget shows no reconfigure handle")
+    public void reconfigureHandleHidden() {
+        assertTrue("widgets without configuration must not show a reconfigure gear",
+                !world.reconfigureHandleVisible(0));
+    }
+
+    @When("I tap the reconfigure handle")
+    public void tapReconfigureHandle() {
+        world.tapReconfigureHandle();
+    }
+
+    @Then("the configuration is requested for the placed widget")
+    public void reconfigureRequestedForPlacedWidget() {
+        world.reconfigureRequestedForPlacedWidget();
+    }
+
+    @Then("the adder previews fill their cells")
+    public void adderPreviewsFillCells() {
+        world.adderPreviewsFillCells();
+    }
+
+    @Then("the adder descriptions wrap to three lines")
+    public void adderDescriptionsWrapToThreeLines() {
+        world.adderDescriptionsWrapToThreeLines();
+    }
+
     @Then("the resized widget is not clipped to its column")
     public void widgetNotClippedToColumn() {
         assertTrue("the row must not clip the widget while it is dragged "
@@ -563,5 +595,10 @@ public class DashboardSteps {
     @Then("the configuration is requested through the widget host")
     public void configurationThroughHost() {
         assertEquals(1, world.hostConfigureRequests());
+    }
+
+    @Then("the eBoard column is {int}dp wide")
+    public void eboardColumnDp(int dp) {
+        assertEquals(dp, world.boardColumnDp());
     }
 }
