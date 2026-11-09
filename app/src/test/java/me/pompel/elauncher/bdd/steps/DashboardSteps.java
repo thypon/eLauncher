@@ -228,6 +228,38 @@ public class DashboardSteps {
         world.holdBoardEmptyOpenAdder();
     }
 
+    @When("I hold the empty board space below the widgets")
+    public void holdEmptyBoardSpaceBelowWidgets() {
+        world.holdBoardEmptyBelowWidgets();
+    }
+
+    @Then("the widget row is built on a plain widget context")
+    public void widgetRowPlainContext() {
+        assertTrue("widget rows must be built on the plain widget context",
+                world.widgetRowBuiltOnPlainContext());
+    }
+
+    @Then("the adder preview backing is transparent")
+    public void adderPreviewTransparent() {
+        assertEquals("the adder preview backing must not be a solid panel",
+                0, world.adderPreviewBackingAlpha());
+    }
+
+    @Then("the edit mode hint is hidden")
+    public void editHintHidden() {
+        assertFalse("edit hint must be hidden outside edit mode",
+                world.editHintVisible());
+    }
+
+    @Then("the edit mode hint explains resizing and removal")
+    public void editHintExplains() {
+        assertTrue("edit hint must be visible in edit mode",
+                world.editHintVisible());
+        assertTrue("edit hint must mention resizing and removal",
+                world.editHintText().toLowerCase().contains("resize")
+                        && world.editHintText().toLowerCase().contains("remov"));
+    }
+
     @Then("the widget adder popover opens again")
     public void widgetAdderPopoverOpensAgain() {
         assertTrue("expected the widget adder popover to open again",

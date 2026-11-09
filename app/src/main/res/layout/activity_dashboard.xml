@@ -28,6 +28,16 @@
             android:gravity="center"
             android:text="@string/eboard_empty_hint"
             android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/edit_hint"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom|center_horizontal"
+            android:layout_margin="12dp"
+            android:gravity="center"
+            android:text="@string/eboard_edit_hint"
+            android:visibility="gone" />
     </FrameLayout>
 
     <Button
