@@ -56,6 +56,9 @@ public class DashboardActivity extends AppCompatActivity {
     /** Range of a widget row height in dp, used by the resize handle. */
     public static final int MIN_HEIGHT_DP = 140;
     public static final int MAX_HEIGHT_DP = 600;
+    public static final int MIN_WIDTH_DP = 100;
+    /** Fallback height when the provider advises nothing. */
+    public static final int DEFAULT_HEIGHT_DP = 200;
     /** Hold duration that enters edit mode / opens the adder. */
     public static final long HOLD_MS = 700;
     /** Movement (px) that cancels a pending hold. */
@@ -323,6 +326,34 @@ public class DashboardActivity extends AppCompatActivity {
         return adapter.heightDpAt(position);
     }
 
+    /** Current rendered width of the widget view of a row, in dp. */
+    public int rowWidthDp(int position) {
+        ViewGroup row = (ViewGroup) adapter.rowAt(position);
+        View widget = row.getChildAt(0);
+        return Math.round(widget.getLayoutParams().width
+                == ViewGroup.LayoutParams.MATCH_PARENT
+                ? widget.getWidth() / getResources().getDisplayMetrics().density
+                : widget.getLayoutParams().width / getResources().getDisplayMetrics().density);
+    }
+
+    /** Advised row height for a widget: its provider's maximum advised
+     * height when it declares one, else its declared default height,
+     * clamped to the board limits. */
+    private int advisedHeightDp(AppWidgetProviderInfo info) {
+        if (info == null) return DEFAULT_HEIGHT_DP;
+        int advised = info.maxResizeHeight > 0 ? info.maxResizeHeight
+                : (info.minHeight > 0 ? info.minHeight : DEFAULT_HEIGHT_DP);
+        return Math.max(MIN_HEIGHT_DP, Math.min(MAX_HEIGHT_DP, advised));
+    }
+
+    /** Advised row width for a widget: its provider's maximum advised
+     * width when it declares one, else the full grid column it lives in,
+     * clamped to the column width (rows never exceed their cell). */
+    private int advisedWidthDp(AppWidgetProviderInfo info) {
+        if (info == null || info.maxResizeWidth <= 0) return columnWidthDp();
+        return Math.max(MIN_WIDTH_DP, Math.min(columnWidthDp(), info.maxResizeWidth));
+    }
+
     /** Called when a hold lands on empty board space (no widget underneath):
      * opens the widget adder popover. */
     public void onEmptySpaceLongPressed(float x, float y) {
@@ -497,8 +528,12 @@ public class DashboardActivity extends AppCompatActivity {
             @Override
             public Object getSystemService(String name) {
                 if (Context.LAYOUT_INFLATER_SERVICE.equals(name)) {
+                    // the application context's inflater carries no view
+                    // factory: AppCompat installs its substituting factory
+                    // only on the activity's inflater
                     android.view.LayoutInflater base = (android.view.LayoutInflater)
-                            getBaseContext().getSystemService(Context.LAYOUT_INFLATER_SERVICE);
+                            getApplicationContext().getSystemService(
+                                    Context.LAYOUT_INFLATER_SERVICE);
                     return base.cloneInContext(this);
                 }
                 return super.getSystemService(name);
@@ -508,8 +543,13 @@ public class DashboardActivity extends AppCompatActivity {
 
     private View createRow(int id) {
         AppWidgetProviderInfo info = widgets.getAppWidgetInfo(id);
-        int heightDp = store.size(id);
-        int wDp = columnWidthDp();
+        // a resized size wins; otherwise the widget appears at its provider's
+        // advised size: the biggest variant it renders, in the fewest pixels
+        // (maxResize* when the provider advises a max, else its default)
+        int heightDp = store.hasSize(id) ? store.size(id)
+                : advisedHeightDp(info);
+        int wDp = store.hasWidth(id) ? store.width(id)
+                : advisedWidthDp(info);
 
         AppWidgetHostView widget = host.createView(plainWidgetContext(), id, info);
         // API 31+ wraps widgets in a system white rounded container; the board
@@ -517,7 +557,7 @@ public class DashboardActivity extends AppCompatActivity {
         widget.setBackgroundResource(0);
         widget.updateAppWidgetSize(new Bundle(), wDp, heightDp, wDp, heightDp);
         widget.setLayoutParams(new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, (int) dp(heightDp)));
+                (int) dp(wDp), (int) dp(heightDp)));
 
         FrameLayout row = new FrameLayout(this);
         row.setTag(id);
@@ -574,6 +614,9 @@ public class DashboardActivity extends AppCompatActivity {
                     now, now, MotionEvent.ACTION_CANCEL, down[0], down[1], 0);
             row.getChildAt(0).dispatchTouchEvent(cancel);
             cancel.recycle();
+            // a held scrollable widget gave up interception: give it back so
+            // drag-reorder works in edit mode
+            row.getParent().requestDisallowInterceptTouchEvent(false);
             enterEditMode();
         };
         overlay.setOnTouchListener((v, ev) -> {
@@ -584,6 +627,12 @@ public class DashboardActivity extends AppCompatActivity {
                     down[1] = ev.getY();
                     handler.removeCallbacks(holdEnterEdit);
                     handler.postDelayed(holdEnterEdit, HOLD_MS);
+                    // scrollable widget content (ScrollView/AbsListView inside
+                    // the RemoteViews) must keep the stream: the board must
+                    // not intercept scrolls meant for the widget
+                    if (hasScrollableDescendant(row.getChildAt(0))) {
+                        row.getParent().requestDisallowInterceptTouchEvent(true);
+                    }
                     row.getChildAt(0).dispatchTouchEvent(ev);
                     return true;
                 case MotionEvent.ACTION_MOVE:
@@ -623,6 +672,23 @@ public class DashboardActivity extends AppCompatActivity {
         notifyDataSetChanged();
     }
 
+    /** True when the view tree contains a scrollable widget view
+     * (ScrollView or AbsListView — ListView/GridView subclass it), i.e.
+     * content the user scrolls INSIDE the widget. */
+    private static boolean hasScrollableDescendant(View v) {
+        if (v instanceof android.widget.ScrollView
+                || v instanceof android.widget.AbsListView) {
+            return true;
+        }
+        if (v instanceof ViewGroup) {
+            ViewGroup g = (ViewGroup) v;
+            for (int i = 0; i < g.getChildCount(); i++) {
+                if (hasScrollableDescendant(g.getChildAt(i))) return true;
+            }
+        }
+        return false;
+    }
+
     /** Dragging the corner resize handle resizes the row between
      * MIN_HEIGHT_DP and MAX_HEIGHT_DP, updating the widget host live; the new
      * height is persisted on release. The widget view is re-resolved on every
@@ -630,8 +696,8 @@ public class DashboardActivity extends AppCompatActivity {
      * resize a detached view. */
     private class ResizeTouchListener implements View.OnTouchListener {
         private final int id;
-        private float startY;
-        private int startHeightDp;
+        private float startX, startY;
+        private int startWidthDp, startHeightDp;
 
         ResizeTouchListener(int id) {
             this.id = id;
@@ -643,7 +709,13 @@ public class DashboardActivity extends AppCompatActivity {
             ViewGroup row = (ViewGroup) v.getParent();
             switch (ev.getActionMasked()) {
                 case MotionEvent.ACTION_DOWN:
+                    startX = ev.getRawX();
                     startY = ev.getRawY();
+                    startWidthDp = Math.round(
+                            row.getChildAt(0).getLayoutParams().width
+                                    == ViewGroup.LayoutParams.MATCH_PARENT
+                                    ? row.getChildAt(0).getWidth() / dm.density
+                                    : row.getChildAt(0).getLayoutParams().width / dm.density);
                     startHeightDp = Math.round(
                             row.getChildAt(0).getLayoutParams().height / dm.density);
                     // the drag is vertical and crosses the scroll slop fast:
@@ -653,13 +725,23 @@ public class DashboardActivity extends AppCompatActivity {
                     return true;
                 case MotionEvent.ACTION_MOVE: {
                     AppWidgetHostView widget = (AppWidgetHostView) row.getChildAt(0);
+                    // a widget never grows past its grid column: wider needs
+                    // a different row span, not a wider child
+                    int maxW = row.getWidth() > 0
+                            ? Math.round(row.getWidth() / dm.density) : columnWidthDp();
+                    int w = Math.max(MIN_WIDTH_DP, Math.min(maxW,
+                            startWidthDp + Math.round((ev.getRawX() - startX) / dm.density)));
                     int h = Math.max(MIN_HEIGHT_DP, Math.min(MAX_HEIGHT_DP,
                             startHeightDp + Math.round((ev.getRawY() - startY) / dm.density)));
-                    if (h != widget.getLayoutParams().height) {
+                    if (w != widget.getLayoutParams().width
+                            || h != widget.getLayoutParams().height) {
                         widget.setLayoutParams(new FrameLayout.LayoutParams(
-                                ViewGroup.LayoutParams.MATCH_PARENT, (int) dp(h)));
-                        widget.updateAppWidgetSize(new Bundle(), columnWidthDp(), h,
-                                columnWidthDp(), h);
+                                (int) dp(w), (int) dp(h)));
+                        // the row frame follows the drag: it is measured with
+                        // an exact height (the hold overlay relies on that)
+                        row.getLayoutParams().height = (int) dp(h);
+                        row.requestLayout();
+                        widget.updateAppWidgetSize(new Bundle(), w, h, w, h);
                     }
                     return true;
                 }
@@ -667,17 +749,19 @@ public class DashboardActivity extends AppCompatActivity {
                 case MotionEvent.ACTION_CANCEL: {
                     AppWidgetHostView widget = (AppWidgetHostView) row.getChildAt(0);
                     int height = Math.round(widget.getLayoutParams().height / dm.density);
+                    int width = Math.round(widget.getLayoutParams().width / dm.density);
                     store.setSize(id, height);
+                    store.setWidth(id, width);
                     // re-create the widget view: updateAppWidgetSize alone does
                     // not force the provider's RemoteViews to re-layout visually
                     AppWidgetProviderInfo info = widgets.getAppWidgetInfo(id);
                     if (info != null) {
                         row.removeViewAt(0);
                         AppWidgetHostView fresh = host.createView(plainWidgetContext(), id, info);
-                        fresh.updateAppWidgetSize(new Bundle(), columnWidthDp(),
-                                height, columnWidthDp(), height);
+                        fresh.updateAppWidgetSize(new Bundle(), width,
+                                height, width, height);
                         fresh.setLayoutParams(new FrameLayout.LayoutParams(
-                                ViewGroup.LayoutParams.MATCH_PARENT, (int) dp(height)));
+                                (int) dp(width), (int) dp(height)));
                         row.addView(fresh, 0);
                     }
                     return true;
@@ -755,16 +839,25 @@ public class DashboardActivity extends AppCompatActivity {
             DisplayMetrics dm = getResources().getDisplayMetrics();
             View row = rows.get(id);
             if (row != null) {
+                row.getLayoutParams().height = (int) dp(heightDp);
                 AppWidgetHostView widget = (AppWidgetHostView) ((ViewGroup) row).getChildAt(0);
+                int width = widget.getLayoutParams().width == ViewGroup.LayoutParams.MATCH_PARENT
+                        ? columnWidthDp()
+                        : Math.round(widget.getLayoutParams().width / dm.density);
                 widget.setLayoutParams(new FrameLayout.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT, (int) dp(heightDp)));
-                widget.updateAppWidgetSize(new Bundle(), columnWidthDp(), heightDp,
-                        columnWidthDp(), heightDp);
+                        (int) dp(width), (int) dp(heightDp)));
+                widget.updateAppWidgetSize(new Bundle(), width, heightDp,
+                        width, heightDp);
             }
         }
 
         int heightDpAt(int position) {
-            return store.size(ids.get(position));
+            int id = ids.get(position);
+            // mirror createRow: a stored size wins, else the provider's
+            // advised size — the row frame must match the widget view
+            int h = store.hasSize(id) ? store.size(id)
+                    : advisedHeightDp(widgets.getAppWidgetInfo(id));
+            return h;
         }
 
         View rowAt(int position) {
@@ -793,7 +886,7 @@ public class DashboardActivity extends AppCompatActivity {
             if (old != null) old.removeView(row);
             holder.container.removeAllViews();
             holder.container.addView(row, new ViewGroup.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+                    ViewGroup.LayoutParams.MATCH_PARENT, (int) dp(heightDpAt(position))));
         }
 
         @Override

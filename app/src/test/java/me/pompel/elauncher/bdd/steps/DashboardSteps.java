@@ -320,9 +320,6 @@ public class DashboardSteps {
 
     @Then("the widget shows a remove handle")
     public void removeHandleVisible() {
-        System.out.println("eBoardDBG: isEditMode=" + world.dashboard().isEditMode()
-                + " rows=" + world.rowCount()
-                + " handle=" + world.dashboard().boardRowAt(0).findViewWithTag(me.pompel.elauncher.R.id.remove_handle));
         assertTrue("expected an (x) remove handle in edit mode",
                 world.rowChildVisible(0, me.pompel.elauncher.R.id.remove_handle));
     }
@@ -372,6 +369,43 @@ public class DashboardSteps {
     @When("I drag the resize handle to {int}dp")
     public void dragResizeHandleTo(int dp) {
         world.dragResizeHandleTo(dp);
+    }
+
+    @When("I drag the resize handle sideways to {int}dp")
+    public void dragResizeHandleSideways(int dp) {
+        world.dragResizeHandleWidthTo(dp);
+    }
+
+    @When("the widget provider advises a maximum size of {int}x{int}dp")
+    public void adviseProviderSize(int w, int h) {
+        world.adviseProviderSize(w, h);
+    }
+
+    @When("I load scrollable content into the widget")
+    public void loadScrollableContent() {
+        world.pushScrollableWidgetContent(0);
+    }
+
+    @When("I scroll inside the widget")
+    public void scrollInsideWidget() {
+        world.scrollInsideWidget(0, 240);
+    }
+
+    @Then("the widget content has scrolled")
+    public void widgetContentScrolled() {
+        assertTrue("widget content must have scrolled inside the board, scrollTop="
+                        + world.widgetInnerScrollTop(0),
+                world.widgetInnerScrollTop(0) > 0);
+    }
+
+    @Then("the widget is rendered {int}dp wide")
+    public void widgetRenderedWide(int dp) {
+        assertEquals(dp, world.renderedRowWidthDp(0));
+    }
+
+    @Then("the widget width is stored as {int}dp")
+    public void widgetWidthStored(int dp) {
+        assertEquals(dp, world.storedWidth(0));
     }
 
     @Then("the widget row shows a fresh widget view")
