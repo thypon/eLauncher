@@ -282,6 +282,11 @@ public class DashboardSteps {
         assertEquals(2, world.dashboard().gridColumns());
     }
 
+    @Then("the widget occupies the full board row")
+    public void widgetSpansFullBoardRow() {
+        assertEquals(world.dashboard().gridColumns(), world.rowSpan(0));
+    }
+
     @Given("binding widgets is not allowed")
     public void bindingWidgetsNotAllowed() {
         world.allowWidgetBinding(false);

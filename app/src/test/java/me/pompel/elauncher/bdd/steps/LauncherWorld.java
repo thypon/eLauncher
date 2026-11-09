@@ -1417,6 +1417,16 @@ public class LauncherWorld {
         return 0;
     }
 
+    /** The grid span the row's position occupies: 1 = one column,
+     * 2 = the full row (the configured span count). Read from the
+     * span-size lookup so it does not depend on the laid-out frame. */
+    public int rowSpan(int position) {
+        int[] span = new int[1];
+        dashboardScenario.onActivity(a ->
+                span[0] = dashboard().rowSpan(position));
+        return span[0];
+    }
+
     /** Horizontal resize drag through the DECOR: same stream as the vertical
      * variant, but the handle moves sideways. */
     public void dragResizeHandleWidthTo(int targetDp) {
