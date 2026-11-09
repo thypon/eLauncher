@@ -91,15 +91,18 @@ public class DashboardBoardFuzzTest {
                 .getSharedPreferences(BoardStore.PREFS_FILE, Context.MODE_PRIVATE)).ids();
     }
 
-    /** UI path: add button (empty board only) then first kind in the popover. */
+    /** UI path: add button (empty board only) then first kind card in the
+     * popover (the adder is sectioned: the first child of the list is an
+     * app section header, the kinds live in its grid). */
     private void addWidget() {
         activity().findViewById(R.id.add_widget).performClick();
         Dialog dialog = ShadowDialog.getLatestDialog();
         if (dialog == null) throw new AssertionError("adder popover did not open");
-        LinearLayout list = (LinearLayout) dialog.getWindow().getDecorView()
-                .findViewById(R.id.adder_list);
-        if (list == null || list.getChildCount() == 0) throw new AssertionError("no kinds in popover");
-        list.getChildAt(0).performClick();
+        android.widget.GridLayout grid = (android.widget.GridLayout) dialog
+                .getWindow().getDecorView().findViewById(R.id.adder_grid);
+        if (grid == null || grid.getChildCount() == 0)
+            throw new AssertionError("no kinds in popover");
+        grid.getChildAt(0).performClick();
         idle();
     }
 

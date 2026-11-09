@@ -24,6 +24,7 @@ import android.view.Window;
 import androidx.annotation.NonNull;
 import android.widget.Button;
 import android.widget.FrameLayout;
+import android.widget.GridLayout;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
@@ -53,6 +54,7 @@ public class DashboardActivity extends AppCompatActivity {
     static final int HOST_ID = 0x0E13;
     private static final int REQUEST_PICK = 1;
     private static final int REQUEST_BIND = 2;
+    private static final int REQUEST_CONFIGURE = 3;
     /** Range of a widget row height in dp, used by the resize handle. */
     public static final int MIN_HEIGHT_DP = 140;
     public static final int MAX_HEIGHT_DP = 600;
@@ -106,7 +108,9 @@ public class DashboardActivity extends AppCompatActivity {
         emptyHint = findViewById(R.id.empty_hint);
         editHint = findViewById(R.id.edit_hint);
         addWidgetButton = findViewById(R.id.add_widget);
-        widgets = AppWidgetManager.getInstance(this);
+        // the application-context manager is shared with the app-scoped
+        // widget host and is stable across configuration changes
+        widgets = AppWidgetManager.getInstance(getApplicationContext());
         host = new AppWidgetHost(this, HOST_ID);
         store = new BoardStore(getSharedPreferences(BoardStore.PREFS_FILE, MODE_PRIVATE));
         adapter = new BoardAdapter();
@@ -404,8 +408,17 @@ public class DashboardActivity extends AppCompatActivity {
         View content = getLayoutInflater().inflate(R.layout.widget_adder, null);
         LinearLayout list = content.findViewById(R.id.adder_list);
         DisplayMetrics dm = getResources().getDisplayMetrics();
+        // Launcher3 widget-picker structure: kinds grouped under their app,
+        // each app section showing a grid of preview cards
+        java.util.LinkedHashMap<String, java.util.List<AppWidgetProviderInfo>> byApp =
+                new java.util.LinkedHashMap<>();
         for (AppWidgetProviderInfo info : widgets.getInstalledProviders()) {
-            list.addView(adderRow(info, dm));
+            byApp.computeIfAbsent(info.provider.getPackageName(),
+                    p -> new java.util.ArrayList<>()).add(info);
+        }
+        for (java.util.Map.Entry<String, java.util.List<AppWidgetProviderInfo>> e
+                : byApp.entrySet()) {
+            list.addView(adderSection(e.getKey(), e.getValue(), dm));
         }
         adderDialog = new AlertDialog.Builder(this).setView(content).create();
         adderDialog.show();
@@ -418,18 +431,35 @@ public class DashboardActivity extends AppCompatActivity {
         }
     }
 
-    private LinearLayout adderRow(AppWidgetProviderInfo info, DisplayMetrics dm) {
-        LinearLayout row = (LinearLayout) getLayoutInflater()
-                .inflate(R.layout.widget_adder_item, null);
-        TextView title = row.findViewById(R.id.kind_title);
-        TextView sub = row.findViewById(R.id.kind_sub);
-        title.setText(info.loadLabel(getPackageManager()));
-        String app = appLabel(info.provider.getPackageName());
-        String kind = description(info);
-        sub.setText(kind.isEmpty() ? app : app + " · " + kind);
-        fillPreview(row.findViewById(R.id.kind_preview), info);
-        row.setOnClickListener(v -> pickKind(info));
-        return row;
+    /** One app section of the adder: an app header (name, kind count) over a
+     * two-column grid of widget kind cards (Launcher3 picker structure). */
+    private View adderSection(String pkg, java.util.List<AppWidgetProviderInfo> kinds,
+            DisplayMetrics dm) {
+        LinearLayout section = (LinearLayout) getLayoutInflater()
+                .inflate(R.layout.widget_adder_section, null);
+        TextView appTitle = section.findViewById(R.id.adder_app_title);
+        appTitle.setText(appLabel(pkg));
+        TextView appCount = section.findViewById(R.id.adder_app_count);
+        appCount.setText(getString(R.string.eboard_adder_count, kinds.size()));
+        GridLayout grid = section.findViewById(R.id.adder_grid);
+        for (AppWidgetProviderInfo info : kinds) {
+            View cell = getLayoutInflater().inflate(R.layout.widget_adder_cell, null);
+            // cells share the row width evenly (Launcher3 WidgetCell weight=1)
+            cell.setLayoutParams(new GridLayout.LayoutParams(
+                    GridLayout.spec(GridLayout.UNDEFINED, 1f),
+                    GridLayout.spec(GridLayout.UNDEFINED)));
+            TextView title = cell.findViewById(R.id.kind_title);
+            title.setText(info.loadLabel(getPackageManager()));
+            TextView sub = cell.findViewById(R.id.kind_sub);
+            String kind = description(info);
+            sub.setText(kind.isEmpty() ? appLabel(pkg) : appLabel(pkg) + " · " + kind);
+            TextView dims = cell.findViewById(R.id.kind_dims);
+            dims.setText(getString(R.string.eboard_adder_dims, info.minWidth, info.minHeight));
+            fillPreview(cell.findViewById(R.id.kind_preview), info);
+            cell.setOnClickListener(v -> pickKind(info));
+            grid.addView(cell);
+        }
+        return section;
     }
 
     private String appLabel(String pkg) {
@@ -490,10 +520,8 @@ public class DashboardActivity extends AppCompatActivity {
     private void pickKind(AppWidgetProviderInfo info) {
         int id = host.allocateAppWidgetId();
         if (widgets.bindAppWidgetIdIfAllowed(id, info.provider)) {
-            store.add(id);
-            adapter.ids.add(id);
+            beginAdd(id, info);
             closeAdder();
-            notifyDataSetChanged();
         } else {
             host.deleteAppWidgetId(id);
             int fallback = host.allocateAppWidgetId();
@@ -503,6 +531,31 @@ public class DashboardActivity extends AppCompatActivity {
             startActivityForResult(bind, REQUEST_BIND);
             closeAdder(); // otherwise the popover scrim hides the system dialog
         }
+    }
+
+    /** Launcher3-style add completion: a provider that declares a configure
+     * activity must be configured before the row lands (the configure intent
+     * carries the reserved app widget id); cancelling frees the id.
+     * startAppWidgetConfigureActivityForResult is skipped: it only resolves
+     * through the appwidget system service (an IntentSender), which is not
+     * reachable here — the legacy explicit-intent contract is used instead. */
+    private void beginAdd(int id, AppWidgetProviderInfo info) {
+        if (info != null && info.configure != null) {
+            Intent config = new Intent(AppWidgetManager.ACTION_APPWIDGET_CONFIGURE);
+            config.putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, id);
+            config.setComponent(info.configure);
+            try {
+                startActivityForResult(config, REQUEST_CONFIGURE);
+            } catch (RuntimeException e) {
+                // unresolvable configure activity: nothing was configured,
+                // the reserved id must not leak
+                host.deleteAppWidgetId(id);
+            }
+            return;
+        }
+        store.add(id);
+        adapter.ids.add(id);
+        notifyDataSetChanged();
     }
 
     public void closeAdder() {
@@ -533,9 +586,19 @@ public class DashboardActivity extends AppCompatActivity {
                 if (id != -1) host.deleteAppWidgetId(id);
                 return;
             }
-            store.add(id);
-            adapter.ids.add(id);
-            notifyDataSetChanged();
+            beginAdd(id, widgets.getAppWidgetInfo(id));
+        }
+        if (requestCode == REQUEST_CONFIGURE) {
+            AppWidgetProviderInfo info = id == -1 ? null : widgets.getAppWidgetInfo(id);
+            if (resultCode == RESULT_OK && info != null) {
+                store.add(id);
+                adapter.ids.add(id);
+                notifyDataSetChanged();
+            } else if (id != -1) {
+                // cancelled configuration: the reserved id is freed, the
+                // board stays as it was
+                host.deleteAppWidgetId(id);
+            }
         }
     }
 

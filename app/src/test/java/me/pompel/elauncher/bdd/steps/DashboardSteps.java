@@ -124,6 +124,43 @@ public class DashboardSteps {
                 world.storedBoardIds().isEmpty());
     }
 
+    @Given("the widget kind requires configuration")
+    public void widgetKindRequiresConfiguration() {
+        world.requireWidgetConfiguration();
+    }
+
+    @Then("the widget configuration is requested")
+    public void widgetConfigurationRequested() {
+        world.configureRequested();
+    }
+
+    @When("the configuration succeeds")
+    public void configurationSucceeds() {
+        world.deliverConfigureResult(true);
+    }
+
+    @When("the configuration is cancelled")
+    public void configurationCancelled() {
+        world.deliverConfigureResult(false);
+    }
+
+    @Given("another app's widget provider offering {string} is installed")
+    public void anotherAppsProvider(String description) {
+        world.installForeignWidgetProvider(description);
+    }
+
+    @Then("the adder groups the kinds under their apps")
+    public void adderGroupsByApp() {
+        assertTrue("expected the adder to group kinds under app headers",
+                world.adderSectionCount() >= 2
+                        && world.adderSectionsHaveOneKindEach());
+    }
+
+    @Then("the adder previews sit in a 2-column grid")
+    public void adderPreviewGrid() {
+        assertEquals(2, world.adderGridColumns());
+    }
+
     @Then("the launcher lists an {string} entry")
     public void launcherListsEntry(String label) {
         assertTrue("expected a launcher entry labeled " + label, world.hasLauncherEntry(label));
