@@ -60,6 +60,24 @@ public class LauncherWorld {
                 .edit().clear().commit();
         // usage events accumulate in static shadow state and leak across scenarios
         org.robolectric.shadows.ShadowUsageStatsManager.reset();
+        // so do widget providers and bindings: every scenario of a feature
+        // shares one app widget manager, and stale providers made the adder
+        // list ghost kinds from earlier scenarios (mutations of the fresh
+        // fixture were invisible)
+        try {
+            android.appwidget.AppWidgetManager mgr = widgetManager();
+            org.robolectric.shadows.ShadowAppWidgetManager shadow = shadowOf(mgr);
+            for (android.appwidget.AppWidgetProviderInfo pi
+                    : new java.util.ArrayList<>(mgr.getInstalledProviders())) {
+                shadow.removeInstalledProvider(pi);
+            }
+            java.lang.reflect.Field f = org.robolectric.shadows.ShadowAppWidgetManager.class
+                    .getDeclaredField("widgetInfos");
+            f.setAccessible(true);
+            ((java.util.Map<?, ?>) f.get(shadow)).clear();
+        } catch (Exception e) {
+            // no app widget manager in this scenario's sandbox: nothing to clean
+        }
     }
 
     public Context appContext() {
@@ -1065,6 +1083,160 @@ public class LauncherWorld {
         widgetInfo.minResizeHeight = 0;
     }
 
+    /** Marks the fixture kind as configurable: adding it must hand over to
+     * the provider's configure activity before the row lands (the flow
+     * Launch3 uses: bind first, then ACTION_APPWIDGET_CONFIGURE). */
+    public void requireWidgetConfiguration() {
+        if (widgetInfo == null) throw new AssertionError("no fixture provider installed");
+        widgetInfo.configure = new android.content.ComponentName(
+                widgetProvider.getPackageName(), "me.fixtures.Configure");
+        // the framework resolves the configure component before starting it:
+        // register a stub activity so the request is observable
+        org.robolectric.Shadows.shadowOf(appContext().getPackageManager())
+                .addActivityIfNotPresent(widgetInfo.configure);
+    }
+
+    /** A second provider under a different package, for app-section checks. */
+    public void installForeignWidgetProvider(String description) {
+        android.appwidget.AppWidgetProviderInfo info = new android.appwidget.AppWidgetProviderInfo();
+        info.provider = new android.content.ComponentName("com.other.apps",
+                "com.other.apps.OtherProvider");
+        info.label = description;
+        android.content.pm.ActivityInfo ai = new android.content.pm.ActivityInfo();
+        ai.packageName = "com.other.apps";
+        ai.nonLocalizedLabel = "Other Apps";
+        try {
+            java.lang.reflect.Field f = android.appwidget.AppWidgetProviderInfo.class.getField("providerInfo");
+            f.set(info, ai);
+        } catch (Exception ignored) {
+        }
+        shadowOf(widgetManager()).addInstalledProvider(info);
+    }
+
+    /** Asserts the last started activity-for-result is the widget configure
+     * flow for the reserved id, and remembers its request intent. */
+    private android.content.Intent lastConfigureIntent;
+
+    public void configureRequested() {
+        final org.robolectric.shadows.ShadowActivity.IntentForResult[] rec =
+                new org.robolectric.shadows.ShadowActivity.IntentForResult[1];
+        dashboardScenario.onActivity(a ->
+                rec[0] = org.robolectric.Shadows.shadowOf(a)
+                        .getNextStartedActivityForResult());
+        if (rec[0] == null) {
+            throw new AssertionError("no activity result request was started");
+        }
+        if (!android.appwidget.AppWidgetManager.ACTION_APPWIDGET_CONFIGURE
+                .equals(rec[0].intent.getAction())) {
+            throw new AssertionError("expected the widget configure intent, got "
+                    + rec[0].intent.getAction());
+        }
+        if (!rec[0].intent.hasExtra(
+                android.appwidget.AppWidgetManager.EXTRA_APPWIDGET_ID)) {
+            throw new AssertionError("configure intent must carry the app widget id");
+        }
+        lastConfigureIntent = rec[0].intent;
+    }
+
+    public void deliverConfigureResult(boolean ok) {
+        dashboardScenario.onActivity(a -> {
+            org.robolectric.shadows.ShadowActivity shadow =
+                    org.robolectric.Shadows.shadowOf(a);
+            android.content.Intent pending = lastConfigureIntent;
+            if (pending == null) {
+                // scenarios that do not assert the request first: the pending
+                // configure request is still in the activity's queue
+                org.robolectric.shadows.ShadowActivity.IntentForResult ir =
+                        shadow.getNextStartedActivityForResult();
+                if (ir == null || !android.appwidget.AppWidgetManager.ACTION_APPWIDGET_CONFIGURE
+                        .equals(ir.intent.getAction())) {
+                    throw new AssertionError("the widget configure flow was not started");
+                }
+                pending = ir.intent;
+            }
+            int id = pending.getIntExtra(
+                    android.appwidget.AppWidgetManager.EXTRA_APPWIDGET_ID, -1);
+            android.content.Intent data = null;
+            if (ok) {
+                data = new android.content.Intent();
+                data.putExtra(android.appwidget.AppWidgetManager.EXTRA_APPWIDGET_ID, id);
+            }
+            shadow.receiveResult(pending,
+                    ok ? android.app.Activity.RESULT_OK
+                            : android.app.Activity.RESULT_CANCELED,
+                    data);
+        });
+        idle();
+    }
+
+    /** Resource ids by name: the section/grid views ship with the fix, so
+     * the pre-fix red run must still compile (same pattern as edit_hint). */
+    private int titleId() {
+        return appContext().getResources().getIdentifier(
+                "adder_app_title", "id", appContext().getPackageName());
+    }
+
+    private int gridId() {
+        return appContext().getResources().getIdentifier(
+                "adder_grid", "id", appContext().getPackageName());
+    }
+
+    /** App sections in the adder: children of adder_list that carry a
+     * section header. */
+    public int adderSectionCount() {
+        int[] n = new int[1];
+        dashboardScenario.onActivity(a -> {
+            android.app.Dialog d = org.robolectric.shadows.ShadowDialog.getLatestDialog();
+            android.view.ViewGroup list = d.findViewById(me.pompel.elauncher.R.id.adder_list);
+            for (int i = 0; i < list.getChildCount(); i++) {
+                if (list.getChildAt(i).findViewById(
+                        titleId()) != null) n[0]++;
+            }
+        });
+        return n[0];
+    }
+
+    public boolean adderSectionsHaveOneKindEach() {
+        boolean[] ok = new boolean[] { true };
+        dashboardScenario.onActivity(a -> {
+            android.app.Dialog d = org.robolectric.shadows.ShadowDialog.getLatestDialog();
+            android.view.ViewGroup list = d.findViewById(me.pompel.elauncher.R.id.adder_list);
+            int sections = 0;
+            for (int i = 0; i < list.getChildCount(); i++) {
+                android.view.ViewGroup section = (android.view.ViewGroup) list.getChildAt(i);
+                if (section.findViewById(titleId()) == null) {
+                    continue;
+                }
+                sections++;
+                int kinds = 0;
+                for (int j = 0; j < section.getChildCount(); j++) {
+                    View child = section.getChildAt(j);
+                    if (child.findViewById(me.pompel.elauncher.R.id.kind_title) != null) {
+                        kinds++;
+                    }
+                }
+                if (kinds == 0) ok[0] = false;
+            }
+            if (sections == 0) ok[0] = false;
+        });
+        return ok[0];
+    }
+
+    /** Columns of the first preview grid in the adder. */
+    public int adderGridColumns() {
+        int[] cols = new int[] { -1 };
+        dashboardScenario.onActivity(a -> {
+            android.app.Dialog d = org.robolectric.shadows.ShadowDialog.getLatestDialog();
+            android.view.ViewGroup list = d.findViewById(me.pompel.elauncher.R.id.adder_list);
+            for (int i = 0; i < list.getChildCount() && cols[0] == -1; i++) {
+                android.widget.GridLayout grid = list.getChildAt(i).findViewById(
+                        gridId());
+                if (grid != null) cols[0] = grid.getColumnCount();
+            }
+        });
+        return cols[0];
+    }
+
     public void allowWidgetBinding(boolean allowed) {
         shadowOf(widgetManager()).setAllowedToBindAppWidgets(allowed);
     }
@@ -1114,14 +1286,35 @@ public class LauncherWorld {
                 org.robolectric.shadows.ShadowDialog.getLatestDialog();
         LinearLayout list = latest.findViewById(me.pompel.elauncher.R.id.adder_list);
         for (int i = 0; i < list.getChildCount(); i++) {
-            View row = list.getChildAt(i);
-            TextView title = row.findViewById(me.pompel.elauncher.R.id.kind_title);
-            TextView sub = row.findViewById(me.pompel.elauncher.R.id.kind_sub);
-            if (title != null && sub != null
-                    && label.contentEquals(title.getText().toString())
-                    && sub.getText().toString().contains(description)) return true;
+            View section = list.getChildAt(i);
+            for (View cell : adderKindCells(section)) {
+                TextView title = cell.findViewById(me.pompel.elauncher.R.id.kind_title);
+                TextView sub = cell.findViewById(me.pompel.elauncher.R.id.kind_sub);
+                if (label.contentEquals(title.getText().toString())
+                        && sub.getText().toString().contains(description)) return true;
+            }
         }
         return false;
+    }
+
+    /** All kind cards inside an adder section (or a plain list row): any
+     * container whose first child is the kind preview (the card signature),
+     * in document order. */
+    private java.util.List<View> adderKindCells(View root) {
+        java.util.List<View> cells = new java.util.ArrayList<>();
+        java.util.ArrayDeque<View> queue = new java.util.ArrayDeque<>();
+        queue.add(root);
+        while (!queue.isEmpty()) {
+            View v = queue.poll();
+            if (v instanceof android.view.ViewGroup) {
+                android.view.ViewGroup g = (android.view.ViewGroup) v;
+                boolean isCard = g.getChildCount() > 0
+                        && g.getChildAt(0).getId() == me.pompel.elauncher.R.id.kind_preview;
+                if (isCard) cells.add(g);
+                for (int j = 0; j < g.getChildCount(); j++) queue.add(g.getChildAt(j));
+            }
+        }
+        return cells;
     }
 
     public boolean adderRowsShowPreview() {
@@ -1144,14 +1337,16 @@ public class LauncherWorld {
         if (list.getChildCount() == 0) return false;
         float density = appContext().getResources().getDisplayMetrics().density;
         for (int i = 0; i < list.getChildCount(); i++) {
-            View row = list.getChildAt(i);
-            View preview = row.findViewById(me.pompel.elauncher.R.id.kind_preview);
-            TextView sub = row.findViewById(me.pompel.elauncher.R.id.kind_sub);
-            TextView title = row.findViewById(me.pompel.elauncher.R.id.kind_title);
-            if (preview == null || sub == null || title == null) return false;
-            // big preview slot and a description smaller than the title
-            if (preview.getWidth() < 100 * density) return false;
-            if (sub.getTextSize() >= title.getTextSize()) return false;
+            View section = list.getChildAt(i);
+            for (View row : adderKindCells(section)) {
+                View preview = row.findViewById(me.pompel.elauncher.R.id.kind_preview);
+                TextView sub = row.findViewById(me.pompel.elauncher.R.id.kind_sub);
+                TextView title = row.findViewById(me.pompel.elauncher.R.id.kind_title);
+                if (preview == null || sub == null || title == null) return false;
+                // big preview slot and a description smaller than the title
+                if (preview.getWidth() < 100 * density) return false;
+                if (sub.getTextSize() >= title.getTextSize()) return false;
+            }
         }
         return true;
     }
@@ -1273,8 +1468,17 @@ public class LauncherWorld {
         if (list == null || list.getChildCount() == 0) {
             throw new AssertionError("widget adder popover has no kinds");
         }
-        list.getChildAt(0).performClick();
-        idle();
+        // the list is app-sectioned now: the first kind card sits inside the
+        // first section's grid
+        for (int i = 0; i < list.getChildCount(); i++) {
+            java.util.List<View> cells = adderKindCells(list.getChildAt(i));
+            if (!cells.isEmpty()) {
+                cells.get(0).performClick();
+                idle();
+                return;
+            }
+        }
+        throw new AssertionError("widget adder popover has no kinds");
     }
 
     public void clickAdderKind(String label) {
@@ -1282,12 +1486,13 @@ public class LauncherWorld {
                 org.robolectric.shadows.ShadowDialog.getLatestDialog();
         LinearLayout list = latest.findViewById(me.pompel.elauncher.R.id.adder_list);
         for (int i = 0; i < list.getChildCount(); i++) {
-            View row = list.getChildAt(i);
-            TextView title = row.findViewById(me.pompel.elauncher.R.id.kind_title);
-            if (title != null && label.contentEquals(title.getText().toString())) {
-                row.performClick();
-                idle();
-                return;
+            for (View cell : adderKindCells(list.getChildAt(i))) {
+                TextView title = cell.findViewById(me.pompel.elauncher.R.id.kind_title);
+                if (label.contentEquals(title.getText().toString())) {
+                    cell.performClick();
+                    idle();
+                    return;
+                }
             }
         }
         throw new AssertionError("no widget kind labeled " + label + " in the adder");

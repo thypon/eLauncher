@@ -22,6 +22,8 @@
     <string name="eboard_name">eBoard</string>
     <!-- fixture text for the widget-kind description (see LauncherWorld.installWidgetProvider) -->
     <string name="eboard_kind_sample">A digital clock widget</string>
+    <string name="eboard_adder_dims">%1$d \u00d7 %2$d</string>
+    <string name="eboard_adder_count">%1$d widgets</string>
     <string name="eboard_add_widget">Add widget</string>
     <string name="eboard_empty_hint">The board is empty.\nTap “Add widget” to pin a widget.</string>
     <string name="eboard_edit_hint">Drag ▢ to resize · ✕ removes · press empty space to end</string>
