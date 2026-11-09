@@ -128,6 +128,31 @@ Feature: eBoard edit mode and widget adder
     And the fresh widget view is 200dp tall
 
   Scenario: Releasing a resize when the provider is gone does not crash
+
+  Scenario: Dragging the resize handle through the screen resizes the widget
+    When I add a widget from the widget adder
+    And I hold the widget row
+    And I drag the resize handle to 300dp
+    Then the widget is rendered 300dp tall
+
+  Scenario: Holding the empty space below a widget opens the adder
+    When I add a widget from the widget adder
+    And I hold the empty board space below the widgets
+    Then the widget adder popover opens
+
+  Scenario: Widget rows are built on a plain widget context
+    When I add a widget from the widget adder
+    Then the widget row is built on a plain widget context
+
+  Scenario: The adder preview backing is not a solid panel
+    When I long press the empty board space
+    Then the adder preview backing is transparent
+
+  Scenario: Edit mode explains resizing and removal
+    When I add a widget from the widget adder
+    Then the edit mode hint is hidden
+    And I hold the widget row
+    Then the edit mode hint explains resizing and removal
     When I add a widget from the widget adder
     And I long press the widget row
     And the widget provider is unbound

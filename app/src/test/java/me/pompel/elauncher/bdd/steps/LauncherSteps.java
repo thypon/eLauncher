@@ -94,4 +94,16 @@ public class LauncherSteps {
     public void homeScreenVisible() {
         assertTrue(world.homeVisible());
     }
+
+    @When("I call the home launcher")
+    public void callHomeLauncher() {
+        world.callHomeLauncher();
+    }
+
+    @Then("the main view reclaims the home task over the board")
+    public void mainViewReclaimsHomeTask() {
+        assertTrue("calling home must land on the existing main view instance "
+                        + "(singleTask clears whatever sits above it, like the board)",
+                world.mainActivityIsSingleTask());
+    }
 }

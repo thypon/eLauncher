@@ -65,6 +65,7 @@ public class DashboardActivity extends AppCompatActivity {
     private AppWidgetManager widgets;
     private RecyclerView board;
     private TextView emptyHint;
+    private TextView editHint;
     private Button addWidgetButton;
     private BoardStore store;
     private BoardAdapter adapter;
@@ -100,6 +101,7 @@ public class DashboardActivity extends AppCompatActivity {
         findViewById(android.R.id.content).post(this::applySystemGestureExclusion);
         board = findViewById(R.id.board);
         emptyHint = findViewById(R.id.empty_hint);
+        editHint = findViewById(R.id.edit_hint);
         addWidgetButton = findViewById(R.id.add_widget);
         widgets = AppWidgetManager.getInstance(this);
         host = new AppWidgetHost(this, HOST_ID);
@@ -115,47 +117,36 @@ public class DashboardActivity extends AppCompatActivity {
         // touch target when no widget is underneath): hold opens the adder,
         // pressing empty space while in edit mode leaves it. Taps on widgets
         // go through their own proxy overlay (see createRow).
-        board.addOnItemTouchListener(new RecyclerView.SimpleOnItemTouchListener() {
-            private final Handler handler = new Handler(Looper.getMainLooper());
-            private float downX, downY;
-            private final Runnable openAdder = DashboardActivity.this::openAdder;
-
-            @Override
-            public boolean onInterceptTouchEvent(RecyclerView rv, MotionEvent e) {
-                // pressing empty board space while in edit mode leaves it
-                if (e.getActionMasked() == MotionEvent.ACTION_DOWN && editMode
-                        && rv.findChildViewUnder(e.getX(), e.getY()) == null) {
-                    exitEditMode();
-                }
-                return false;
-            }
-
-            @Override
-            public void onTouchEvent(RecyclerView rv, MotionEvent e) {
-                // fires only when the RecyclerView itself is the touch target
-                // (empty board space or the area below the last widget)
-                switch (e.getActionMasked()) {
-                    case MotionEvent.ACTION_DOWN:
-                        downX = e.getX();
-                        downY = e.getY();
-                        if (editMode) {
-                            exitEditMode(); // pressing empty space leaves edit mode
-                        } else {
-                            handler.removeCallbacks(openAdder);
-                            handler.postDelayed(openAdder, HOLD_MS);
-                        }
-                        break;
-                    case MotionEvent.ACTION_MOVE:
-                        if (Math.abs(e.getX() - downX) > HOLD_CANCEL_SLOP_PX
-                                || Math.abs(e.getY() - downY) > HOLD_CANCEL_SLOP_PX) {
-                            handler.removeCallbacks(openAdder);
-                        }
-                        break;
-                    default:
+        // An OnTouchListener on the board fires whenever the board view is
+        // the touch target — a RecyclerView.OnItemTouchListener would NOT:
+        // its onTouchEvent only runs after onInterceptTouchEvent returns
+        // true, so the empty-space hold was dead there.
+        final Handler handler = new Handler(Looper.getMainLooper());
+        final Runnable openAdder = this::openAdder;
+        final float[] holdDown = new float[2];
+        board.setOnTouchListener((rv, e) -> {
+            switch (e.getActionMasked()) {
+                case MotionEvent.ACTION_DOWN:
+                    holdDown[0] = e.getX();
+                    holdDown[1] = e.getY();
+                    if (editMode) {
+                        exitEditMode(); // pressing empty space leaves edit mode
+                    } else {
                         handler.removeCallbacks(openAdder);
-                        break;
-                }
+                        handler.postDelayed(openAdder, HOLD_MS);
+                    }
+                    break;
+                case MotionEvent.ACTION_MOVE:
+                    if (Math.abs(e.getX() - holdDown[0]) > HOLD_CANCEL_SLOP_PX
+                            || Math.abs(e.getY() - holdDown[1]) > HOLD_CANCEL_SLOP_PX) {
+                        handler.removeCallbacks(openAdder);
+                    }
+                    break;
+                default:
+                    handler.removeCallbacks(openAdder);
+                    break;
             }
+            return false; // the RecyclerView keeps scrolling and tapping
         });
     }
 
@@ -219,12 +210,6 @@ public class DashboardActivity extends AppCompatActivity {
                 @NonNull MotionEvent e2, float velocityX, float velocityY) {
             float xDiff = e2.getX() - e1.getX();
             float yDiff = e2.getY() - e1.getY();
-            // swiping up returns to the launcher (the "go back" gesture)
-            if (Math.abs(yDiff) > Math.abs(xDiff) && yDiff < 0
-                    && Math.abs(velocityY) > 100) {
-                exitToLauncher(0);
-                return true;
-            }
             if (entryDirection == 0 || editMode
                     || Math.abs(xDiff) <= Math.abs(yDiff)
                     || Math.abs(xDiff) <= 100 || Math.abs(velocityX) <= 100) {
@@ -288,6 +273,7 @@ public class DashboardActivity extends AppCompatActivity {
         adapter.setEditMode(true);
         updateUiState(); // no notifyDataSetChanged: the touch that triggered the
                          // edit must not detach the row mid-gesture
+        editHint.setVisibility(View.VISIBLE);
     }
 
     public void exitEditMode() {
@@ -295,6 +281,7 @@ public class DashboardActivity extends AppCompatActivity {
         editMode = false;
         adapter.setEditMode(false);
         updateUiState();
+        editHint.setVisibility(View.GONE);
     }
 
     public boolean isEditMode() {
@@ -412,7 +399,8 @@ public class DashboardActivity extends AppCompatActivity {
         if (info.initialLayout != 0) {
             try {
                 preview = new android.widget.RemoteViews(
-                        info.provider.getPackageName(), info.initialLayout).apply(this, box);
+                        info.provider.getPackageName(), info.initialLayout)
+                        .apply(plainWidgetContext(), box);
             } catch (Exception ignored) {
                 preview = null;
             }
@@ -499,12 +487,31 @@ public class DashboardActivity extends AppCompatActivity {
      * mode, an (x) remove handle and a corner resize handle. Taps reach the
      * widget itself; a hold enters edit mode through the board-level touch
      * listener, and the row long click does the same (BDD path). */
+    /** A plain context for widget view creation: the activity context's
+     * LayoutInflater carries the AppCompat view factory, and RemoteViews
+     * reflection rejects the substituted classes it produces
+     * (AppCompatImageView) with "Couldn't add widget". This wrapper serves
+     * a CLONED inflater — cloneInContext does not carry the factories. */
+    private android.content.Context plainWidgetContext() {
+        return new android.content.ContextWrapper(this) {
+            @Override
+            public Object getSystemService(String name) {
+                if (Context.LAYOUT_INFLATER_SERVICE.equals(name)) {
+                    android.view.LayoutInflater base = (android.view.LayoutInflater)
+                            getBaseContext().getSystemService(Context.LAYOUT_INFLATER_SERVICE);
+                    return base.cloneInContext(this);
+                }
+                return super.getSystemService(name);
+            }
+        };
+    }
+
     private View createRow(int id) {
         AppWidgetProviderInfo info = widgets.getAppWidgetInfo(id);
         int heightDp = store.size(id);
         int wDp = columnWidthDp();
 
-        AppWidgetHostView widget = host.createView(this, id, info);
+        AppWidgetHostView widget = host.createView(plainWidgetContext(), id, info);
         // API 31+ wraps widgets in a system white rounded container; the board
         // wants the widget content itself, transparent
         widget.setBackgroundResource(0);
@@ -639,6 +646,10 @@ public class DashboardActivity extends AppCompatActivity {
                     startY = ev.getRawY();
                     startHeightDp = Math.round(
                             row.getChildAt(0).getLayoutParams().height / dm.density);
+                    // the drag is vertical and crosses the scroll slop fast:
+                    // without this the RecyclerView steals the stream to
+                    // scroll and the resize dies mid-gesture
+                    row.getParent().requestDisallowInterceptTouchEvent(true);
                     return true;
                 case MotionEvent.ACTION_MOVE: {
                     AppWidgetHostView widget = (AppWidgetHostView) row.getChildAt(0);
@@ -662,7 +673,7 @@ public class DashboardActivity extends AppCompatActivity {
                     AppWidgetProviderInfo info = widgets.getAppWidgetInfo(id);
                     if (info != null) {
                         row.removeViewAt(0);
-                        AppWidgetHostView fresh = host.createView(DashboardActivity.this, id, info);
+                        AppWidgetHostView fresh = host.createView(plainWidgetContext(), id, info);
                         fresh.updateAppWidgetSize(new Bundle(), columnWidthDp(),
                                 height, columnWidthDp(), height);
                         fresh.setLayoutParams(new FrameLayout.LayoutParams(
@@ -725,6 +736,10 @@ public class DashboardActivity extends AppCompatActivity {
                 View resize = row.findViewWithTag(R.id.resize_handle);
                 if (remove != null) remove.setVisibility(on ? View.VISIBLE : View.GONE);
                 if (resize != null) resize.setVisibility(on ? View.VISIBLE : View.GONE);
+                // the hold overlay sits above the handles; it must step aside
+                // in edit mode or it swallows every touch meant for them
+                View overlay = row.findViewWithTag(R.id.hold_overlay);
+                if (overlay != null) overlay.setVisibility(on ? View.GONE : View.VISIBLE);
             }
         }
 

@@ -698,6 +698,31 @@ public class LauncherWorld {
         return visible[0];
     }
 
+    /** Dispatches the system home action at the launcher, like pressing the
+     * home button while the board is showing. */
+    public void callHomeLauncher() {
+        Intent home = new Intent(Intent.ACTION_MAIN)
+                .addCategory(Intent.CATEGORY_HOME)
+                .setPackage(appContext().getPackageName())
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        appContext().startActivity(home);
+        idle();
+    }
+
+    /** The home entry must declare singleTask: a home invocation then lands on
+     * the existing main view instance and clears whatever sits above it (the
+     * board, settings), instead of surfacing the board again. */
+    public boolean mainActivityIsSingleTask() {
+        android.content.pm.ActivityInfo info;
+        try {
+            info = appContext().getPackageManager().getActivityInfo(
+                    new android.content.ComponentName(appContext(), MainActivity.class), 0);
+        } catch (android.content.pm.PackageManager.NameNotFoundException e) {
+            throw new AssertionError("main activity not found", e);
+        }
+        return info.launchMode == android.content.pm.ActivityInfo.LAUNCH_SINGLE_TASK;
+    }
+
     /** Adapter data labels in drawer order. */
     public List<String> drawerLabels() {
         List<String> labels = new ArrayList<>();
@@ -1473,17 +1498,147 @@ public class LauncherWorld {
             if (handle == null) throw new AssertionError("no resize handle: enter edit mode first");
             int startDp = dashboard().rowHeightDp(0);
             float density = a.getResources().getDisplayMetrics().density;
+            // force a layout pass so the handle reports real coordinates
+            androidx.recyclerview.widget.RecyclerView board =
+                    a.findViewById(me.pompel.elauncher.R.id.board);
+            View parent = (View) board.getParent();
+            int w = Math.max(1, parent.getWidth());
+            int h = Math.max(1, parent.getHeight());
+            board.measure(
+                    View.MeasureSpec.makeMeasureSpec(w, View.MeasureSpec.EXACTLY),
+                    View.MeasureSpec.makeMeasureSpec(h, View.MeasureSpec.EXACTLY));
+            board.layout(0, 0, w, h);
+            // drag through the DECOR like a real finger: the touch stream is
+            // routed by the view hierarchy, so whatever sits on top of the
+            // handle on the device intercepts it too (regression: the hold
+            // overlay swallowed resize drags in edit mode)
+            View decor = a.getWindow().getDecorView();
+            int[] hl = new int[2]; handle.getLocationOnScreen(hl);
+            int[] dl = new int[2]; decor.getLocationOnScreen(dl);
+            float x = hl[0] - dl[0] + handle.getWidth() / 2f;
+            float y0 = hl[1] - dl[1] + handle.getHeight() / 2f;
+            float dy = (targetDp - startDp) * density;
             long base = android.os.SystemClock.uptimeMillis();
-            int y0 = 100;
-            int y1 = 100 + Math.round((targetDp - startDp) * density);
-            handle.dispatchTouchEvent(android.view.MotionEvent.obtain(base, base,
-                    android.view.MotionEvent.ACTION_DOWN, 10, y0, 0));
-            handle.dispatchTouchEvent(android.view.MotionEvent.obtain(base, base + 10,
-                    android.view.MotionEvent.ACTION_MOVE, 10, y1, 0));
-            handle.dispatchTouchEvent(android.view.MotionEvent.obtain(base, base + 20,
-                    android.view.MotionEvent.ACTION_UP, 10, y1, 0));
+            decor.dispatchTouchEvent(android.view.MotionEvent.obtain(
+                    base, base, android.view.MotionEvent.ACTION_DOWN, x, y0, 0));
+            decor.dispatchTouchEvent(android.view.MotionEvent.obtain(
+                    base, base + 16, android.view.MotionEvent.ACTION_MOVE, x, y0 + dy / 2, 0));
+            decor.dispatchTouchEvent(android.view.MotionEvent.obtain(
+                    base, base + 32, android.view.MotionEvent.ACTION_MOVE, x, y0 + dy, 0));
+            decor.dispatchTouchEvent(android.view.MotionEvent.obtain(
+                    base, base + 48, android.view.MotionEvent.ACTION_UP, x, y0 + dy, 0));
         });
         idle();
+    }
+
+    /** Hold on the empty board space BELOW the widgets, dispatched through
+     * the decor: the touch stream is routed by the view hierarchy, so only a
+     * live listener on the board itself can open the adder (regression: the
+     * RecyclerView item-touch listener never fired there). */
+    public void holdBoardEmptyBelowWidgets() {
+        dashboardScenario.onActivity(a -> {
+            androidx.recyclerview.widget.RecyclerView board =
+                    a.findViewById(me.pompel.elauncher.R.id.board);
+            View parent = (View) board.getParent();
+            int w = Math.max(1, parent.getWidth());
+            int h = Math.max(1, parent.getHeight());
+            board.measure(
+                    View.MeasureSpec.makeMeasureSpec(w, View.MeasureSpec.EXACTLY),
+                    View.MeasureSpec.makeMeasureSpec(h, View.MeasureSpec.EXACTLY));
+            board.layout(0, 0, w, h);
+            View row0 = board.getChildAt(0);
+            if (row0 == null) throw new AssertionError("no row on the board");
+            int y = Math.min(row0.getBottom() + 120, board.getHeight() - 20);
+            int[] bl = new int[2]; board.getLocationOnScreen(bl);
+            int[] dl = new int[2]; a.getWindow().getDecorView().getLocationOnScreen(dl);
+            float x = bl[0] - dl[0] + board.getWidth() / 2f;
+            float fy = bl[1] - dl[1] + y;
+            a.getWindow().getDecorView().dispatchTouchEvent(
+                    android.view.MotionEvent.obtain(
+                            android.os.SystemClock.uptimeMillis(),
+                            android.os.SystemClock.uptimeMillis(),
+                            android.view.MotionEvent.ACTION_DOWN, x, fy, 0));
+        });
+        org.robolectric.Shadows.shadowOf(Looper.getMainLooper())
+                .idleFor(800, java.util.concurrent.TimeUnit.MILLISECONDS);
+        dashboardScenario.onActivity(a -> {
+            androidx.recyclerview.widget.RecyclerView board =
+                    a.findViewById(me.pompel.elauncher.R.id.board);
+            int[] bl = new int[2]; board.getLocationOnScreen(bl);
+            int[] dl = new int[2]; a.getWindow().getDecorView().getLocationOnScreen(dl);
+            View row0 = board.getChildAt(0);
+            int y = Math.min(row0.getBottom() + 120, board.getHeight() - 20);
+            a.getWindow().getDecorView().dispatchTouchEvent(
+                    android.view.MotionEvent.obtain(
+                            android.os.SystemClock.uptimeMillis(),
+                            android.os.SystemClock.uptimeMillis(),
+                            android.view.MotionEvent.ACTION_UP,
+                            bl[0] - dl[0] + board.getWidth() / 2f, bl[1] - dl[1] + y, 0));
+        });
+        idle();
+    }
+
+    /** True when the edit-mode hint bar is visible on the board. The id is
+     * looked up by name so this helper compiles before the view ships. */
+    public boolean editHintVisible() {
+        boolean[] v = new boolean[1];
+        dashboardScenario.onActivity(a -> {
+            int id = a.getResources().getIdentifier(
+                    "edit_hint", "id", a.getPackageName());
+            View hint = id == 0 ? null : a.findViewById(id);
+            v[0] = hint != null && hint.getVisibility() == View.VISIBLE;
+        });
+        return v[0];
+    }
+
+    /** The text of the edit-mode hint bar. */
+    public String editHintText() {
+        String[] t = new String[1];
+        dashboardScenario.onActivity(a -> {
+            int id = a.getResources().getIdentifier(
+                    "edit_hint", "id", a.getPackageName());
+            View hint = id == 0 ? null : a.findViewById(id);
+            t[0] = hint == null ? "" : ((android.widget.TextView) hint).getText().toString();
+        });
+        return t[0];
+    }
+
+    /** True when the widget view of row 0 was built on the plain widget
+     * context (not the activity): RemoteViews reflection rejects classes
+     * substituted by the AppCompat view factory ("Couldn't add widget" on
+     * device), so rows must inflate through a factory-free context. */
+    public boolean widgetRowBuiltOnPlainContext() {
+        boolean[] ok = new boolean[1];
+        dashboardScenario.onActivity(a -> {
+            android.content.Context ctx = ((android.view.ViewGroup) dashboard()
+                    .boardRowAt(0)).getChildAt(0).getContext();
+            ok[0] = ctx != a && ctx instanceof android.content.ContextWrapper;
+        });
+        return ok[0];
+    }
+
+    /** The alpha channel of the adder preview frame's solid color, resolved
+     * through the activity theme: 0 = no solid backing panel. */
+    public int adderPreviewBackingAlpha() {
+        int[] c = new int[1]; c[0] = -2;
+        dashboardScenario.onActivity(a -> {
+            android.content.res.Resources res = a.getResources();
+            try {
+                org.xmlpull.v1.XmlPullParser p = res.getXml(
+                        me.pompel.elauncher.R.drawable.preview_frame);
+                while (p.next() != org.xmlpull.v1.XmlPullParser.END_DOCUMENT) {
+                    if ("solid".equals(p.getName())) break;
+                }
+                android.util.AttributeSet as = android.util.Xml.asAttributeSet(p);
+                android.content.res.TypedArray ta = a.getTheme().obtainStyledAttributes(
+                        as, new int[]{android.R.attr.color}, 0, 0);
+                c[0] = android.graphics.Color.alpha(ta.getColor(0, -1));
+                ta.recycle();
+            } catch (Exception e) {
+                throw new AssertionError("cannot read preview_frame solid color", e);
+            }
+        });
+        return c[0];
     }
 
     /** Drops the shadow manager's bound-widget record, as if the widget id
