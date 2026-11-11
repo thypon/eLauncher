@@ -167,6 +167,17 @@ public class MainActivity extends AppCompatActivity {
         if (change) changeLayout(true, false);
     }
 
+    /** ACTION_VIEW intent for a stored link. REORDER_TO_FRONT brings the
+     * browser's already open window (with its current tab) to the front on
+     * repeated launches, instead of stacking another tab on every tap —
+     * on e-ink, both a tab switch and a reload are slow. Browsers expose no
+     * API to focus a specific tab by URL, so the front-most tab is shown. */
+    private Intent linkViewIntent(String uri) {
+        Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(uri));
+        intent.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT);
+        return intent;
+    }
+
     private void safeStartActivity(Intent intent) {
         int[] anims = swipeLaunchAnimations(swipeEnterDirection);
         swipeEnterDirection = 0;
@@ -426,7 +437,7 @@ public class MainActivity extends AppCompatActivity {
             textView.setOnClickListener(v -> {
                 String value = prefs.getString("p" + textView.getTag(), "");
                 Intent intent = AppLink.isLink(value)
-                    ? new Intent(Intent.ACTION_VIEW, Uri.parse(AppLink.decode(value).uri()))
+                    ? linkViewIntent(AppLink.decode(value).uri())
                     : getPackageManager().getLaunchIntentForPackage(value);
                 openAppWithIntent(intent, true);
             });
@@ -604,7 +615,7 @@ public class MainActivity extends AppCompatActivity {
         if (AppLink.isLink(pkg)) {
             // a link target goes through the system's URI handler (browser,
             // store app, ...) with the same directional animation
-            safeStartActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(AppLink.decode(pkg).uri())));
+            safeStartActivity(linkViewIntent(AppLink.decode(pkg).uri()));
             return;
         }
         Intent intent = getPackageManager().getLaunchIntentForPackage(pkg);
