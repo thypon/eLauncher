@@ -18,6 +18,7 @@ Feature: Fling back out of the eBoard dashboard
     Then the eBoard dashboard stays open
 
   Scenario: The opposite fling returns to the launcher with the reverse animation
+    Given animations are enabled
     When I fling right on the home screen
     And the eBoard dashboard opens on screen
     And I fling left on the eBoard dashboard
@@ -31,7 +32,8 @@ Feature: Fling back out of the eBoard dashboard
     Then the eBoard dashboard stays open
 
   Scenario: Entry from the right flips the enabled direction
-    Given the right gesture is assigned to eBoard
+    Given animations are enabled
+    And the right gesture is assigned to eBoard
     When I fling left on the home screen
     And the eBoard dashboard opens on screen
     And I fling left on the eBoard dashboard

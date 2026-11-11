@@ -229,7 +229,10 @@ public class DashboardActivity extends AppCompatActivity {
     private void exitToLauncher(int direction) {
         int[] anims = MainActivity.swipeLaunchAnimations(direction);
         finish();
-        if (anims != null) {
+        if (!MainActivity.animationsEnabled(PreferenceManager.getDefaultSharedPreferences(this))) {
+            // animations disabled: cancel even the system's default animation
+            overridePendingTransition(0, 0);
+        } else if (anims != null) {
             overridePendingTransition(anims[0], anims[1]);
         }
     }
@@ -703,8 +706,19 @@ public class DashboardActivity extends AppCompatActivity {
         if (w != null) {
             w.setGravity(Gravity.BOTTOM);
             w.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, dm.heightPixels / 2);
-            w.setWindowAnimations(R.style.WidgetAdderAnimation);
+            w.setWindowAnimations(animationsEnabled()
+                    ? R.style.WidgetAdderAnimation : 0);
         }
+    }
+
+    /** Whether the animation toggle is on (off by default: e-ink). */
+    private boolean animationsEnabled() {
+        return MainActivity.animationsEnabled(PreferenceManager.getDefaultSharedPreferences(this));
+    }
+
+    /** The popover's window, or null while it is closed; test-visible. */
+    public Window adderWindow() {
+        return adderDialog == null ? null : adderDialog.getWindow();
     }
 
     private LinearLayout adderRow(AppWidgetProviderInfo info, DisplayMetrics dm) {

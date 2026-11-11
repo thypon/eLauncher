@@ -1272,6 +1272,53 @@ public class LauncherWorld {
                 .edit().putBoolean("dark_mode_preference", on).commit();
     }
 
+    public void setAnimationsEnabled(boolean on) {
+        android.preference.PreferenceManager.getDefaultSharedPreferences(appContext())
+                .edit().putBoolean(me.pompel.elauncher.MainActivity.ANIMATIONS_PREF, on).commit();
+    }
+
+    /** The settings preference fragment, for preference-model lookups that
+     * survive RecyclerView row virtualization. */
+    private androidx.preference.PreferenceFragmentCompat settingsFragment() {
+        androidx.fragment.app.Fragment f = settingsActivity().getSupportFragmentManager()
+                .findFragmentById(me.pompel.elauncher.R.id.settings);
+        if (!(f instanceof androidx.preference.PreferenceFragmentCompat)) {
+            throw new AssertionError("settings preference fragment not found");
+        }
+        return (androidx.preference.PreferenceFragmentCompat) f;
+    }
+
+    public boolean animationsSwitchChecked() {
+        androidx.preference.TwoStatePreference pref = animationsSwitchPreference();
+        return pref.isChecked();
+    }
+
+    public void toggleAnimationsSwitch() {
+        androidx.preference.TwoStatePreference pref = animationsSwitchPreference();
+        // same persist+notify path the switch's click takes
+        pref.setChecked(!pref.isChecked());
+        idle();
+    }
+
+    private androidx.preference.TwoStatePreference animationsSwitchPreference() {
+        androidx.preference.Preference pref = settingsFragment()
+                .findPreference(me.pompel.elauncher.MainActivity.ANIMATIONS_PREF);
+        if (!(pref instanceof androidx.preference.TwoStatePreference)) {
+            throw new AssertionError("No animations switch preference");
+        }
+        return (androidx.preference.TwoStatePreference) pref;
+    }
+
+    /** windowAnimations of the board's widget-adder popover window (0 = none). */
+    public int adderWindowAnimations() {
+        int[] anims = new int[1];
+        dashboardScenario.onActivity(a -> {
+            android.view.Window w = ((me.pompel.elauncher.DashboardActivity) a).adderWindow();
+            anims[0] = w == null ? 0 : w.getAttributes().windowAnimations;
+        });
+        return anims[0];
+    }
+
     public boolean boardBackgroundIsThemeBackground() {
         boolean[] match = new boolean[1];
         dashboardScenario.onActivity(a -> {

@@ -19,6 +19,11 @@
         app:summary="@string/dark_mode_summary"
         app:layout="@layout/preference_row" />
     <SwitchPreferenceCompat
+        app:key="animations_preference"
+        app:title="@string/animations_title"
+        app:summary="@string/animations_summary"
+        app:layout="@layout/preference_row" />
+    <SwitchPreferenceCompat
         app:key="lock_portrait_preference"
         app:title="@string/lock_portrait_title"
         app:summary="@string/lock_portrait_summary"

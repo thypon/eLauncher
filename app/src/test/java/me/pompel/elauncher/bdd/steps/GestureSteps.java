@@ -233,6 +233,38 @@ public class GestureSteps {
         throw new AssertionError("expected cleared " + side + "_gesture_package but was: " + stored);
     }
 
+    @Given("animations are enabled")
+    public void animationsAreEnabled() {
+        world.setAnimationsEnabled(true);
+    }
+
+    /** e-ink default: the launch switches instantly — even the system's
+     * default window animation is cancelled (pending transitions 0,0). */
+    @Then("the launched activity uses no animation")
+    public void launchedActivityUsesNoAnimation() {
+        MainActivity[] ref = new MainActivity[1];
+        world.scenario.onActivity(a -> ref[0] = a);
+        org.robolectric.shadows.ShadowActivity shadow = org.robolectric.Shadows.shadowOf(ref[0]);
+        world.await(() -> shadow.getPendingTransitionEnterAnimationResourceId() != -1);
+        assertEquals("expected cancelled enter animation",
+                0, shadow.getPendingTransitionEnterAnimationResourceId());
+        assertEquals("expected cancelled exit animation",
+                0, shadow.getPendingTransitionExitAnimationResourceId());
+    }
+
+    /** e-ink default: the board exit switches instantly (pending transitions 0,0). */
+    @Then("the eBoard dashboard exits without animation")
+    public void eboardDashboardExitsWithoutAnimation() {
+        DashboardActivity target = world.dashboardFlingTarget;
+        assertNotNull("no dashboard captured before the fling", target);
+        org.robolectric.shadows.ShadowActivity shadow = org.robolectric.Shadows.shadowOf(target);
+        world.await(() -> shadow.getPendingTransitionExitAnimationResourceId() != -1);
+        assertEquals("expected cancelled board exit animation",
+                0, shadow.getPendingTransitionExitAnimationResourceId());
+        assertEquals("expected cancelled launcher home return animation",
+                0, shadow.getPendingTransitionEnterAnimationResourceId());
+    }
+
     /** Asserts the swipe/edge launch slides the new activity in from the given
      * side while the launcher slides out to the opposite side. */
     @Then("the launched activity animates in from the {word}")

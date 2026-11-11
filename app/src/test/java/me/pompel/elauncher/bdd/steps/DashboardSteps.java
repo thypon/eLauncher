@@ -230,6 +230,17 @@ public class DashboardSteps {
         assertTrue("expected the widget adder popover to open", world.adderOpen());
     }
 
+    @Then("the widget adder popover animates in from the bottom")
+    public void adderPopoverAnimatesFromBottom() {
+        assertEquals(me.pompel.elauncher.R.style.WidgetAdderAnimation,
+                world.adderWindowAnimations());
+    }
+
+    @Then("the widget adder popover has no slide animation")
+    public void adderPopoverHasNoSlideAnimation() {
+        assertEquals(0, world.adderWindowAnimations());
+    }
+
     @Then("the widget adder popover is closed")
     public void widgetAdderPopoverClosed() {
         assertTrue("expected the widget adder popover to be closed", !world.adderOpen());
