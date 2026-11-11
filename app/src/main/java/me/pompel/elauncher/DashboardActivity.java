@@ -6,6 +6,8 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.res.TypedArray;
+import android.graphics.Color;
+import android.graphics.drawable.GradientDrawable;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
@@ -125,6 +127,16 @@ public class DashboardActivity extends AppCompatActivity {
         findViewById(android.R.id.content).post(this::applySystemGestureExclusion);
         board = findViewById(R.id.board);
         boardStack = findViewById(R.id.board_stack);
+        // a 4px gap between stack children (widgets, and between the edit
+        // bar and its widget): the divider is a fixed-size transparent
+        // drawable, so it tracks child insertions/removals with no
+        // per-child margin bookkeeping
+        GradientDrawable gap = new GradientDrawable();
+        gap.setColor(Color.TRANSPARENT);
+        gap.setSize(4, 4);
+        boardStack.setDividerDrawable(gap);
+        boardStack.setShowDividers(LinearLayout.SHOW_DIVIDER_MIDDLE);
+        boardStack.setDividerPadding(0);
         emptyHint = findViewById(R.id.empty_hint);
         addWidgetButton = findViewById(R.id.add_widget);
         widgets = AppWidgetManager.getInstance(this);
