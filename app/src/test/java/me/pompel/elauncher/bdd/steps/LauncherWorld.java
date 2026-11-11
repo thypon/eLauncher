@@ -56,7 +56,7 @@ public class LauncherWorld {
         android.preference.PreferenceManager.getDefaultSharedPreferences(appContext())
                 .edit().clear().commit();
         // the eBoard layout persists in its own prefs file and leaks across scenarios
-        appContext().getSharedPreferences(me.pompel.elauncher.BoardStore.PREFS_FILE, Context.MODE_PRIVATE)
+        appContext().getSharedPreferences(me.pompel.elauncher.widget.WidgetPrefs.PREFS_FILE, Context.MODE_PRIVATE)
                 .edit().clear().commit();
         // usage events accumulate in static shadow state and leak across scenarios
         org.robolectric.shadows.ShadowUsageStatsManager.reset();
@@ -1380,15 +1380,17 @@ public class LauncherWorld {
         return h[0];
     }
 
-    /** Seeds the board store directly (ids only, no binding) — for stale-widget scenarios. */
+    /** Seeds the board store directly (ids only, no binding) — for stale-widget
+     * scenarios. Deliberately writes the legacy BoardStore key so the
+     * WidgetPrefs migration is exercised on first read. */
     public void seedBoardIds(int... ids) {
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < ids.length; i++) {
             if (i > 0) sb.append(',');
             sb.append(ids[i]);
         }
-        appContext().getSharedPreferences(me.pompel.elauncher.BoardStore.PREFS_FILE, Context.MODE_PRIVATE)
-                .edit().putString(me.pompel.elauncher.BoardStore.KEY_IDS, sb.toString()).commit();
+        appContext().getSharedPreferences(me.pompel.elauncher.widget.WidgetPrefs.PREFS_FILE, Context.MODE_PRIVATE)
+                .edit().putString("widget_ids", sb.toString()).commit();
     }
 
     private me.pompel.elauncher.widget.WidgetPrefs widgetPrefs() {
