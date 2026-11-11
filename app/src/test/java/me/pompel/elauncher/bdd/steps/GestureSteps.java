@@ -233,9 +233,9 @@ public class GestureSteps {
         throw new AssertionError("expected cleared " + side + "_gesture_package but was: " + stored);
     }
 
-    @Given("animations are enabled")
-    public void animationsAreEnabled() {
-        world.setAnimationsEnabled(true);
+    @Given("animations are disabled")
+    public void animationsAreDisabled() {
+        world.setAnimationsEnabled(false);
     }
 
     /** e-ink default: the launch switches instantly — even the system's

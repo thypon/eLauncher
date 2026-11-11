@@ -202,14 +202,14 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    /** Preference key of the global animation toggle. Off by default: e-ink
-     * displays ghost on every animated redraw. */
+    /** Preference key of the global animation toggle. On by default; turn it
+     * off on e-ink displays, which ghost on every animated redraw. */
     public static final String ANIMATIONS_PREF = "animations_preference";
 
     /** Whether window/transition animations are enabled for the given prefs;
-     * the setting defaults to off (e-ink). */
+     * the setting defaults to on. */
     public static boolean animationsEnabled(SharedPreferences prefs) {
-        return prefs.getBoolean(ANIMATIONS_PREF, false);
+        return prefs.getBoolean(ANIMATIONS_PREF, true);
     }
 
     private boolean animationsEnabled() {

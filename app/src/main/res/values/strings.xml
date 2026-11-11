@@ -6,7 +6,7 @@
     <string name="dark_mode_title">Dark Mode</string>
     <string name="dark_mode_summary">Enable or disable dark mode</string>
     <string name="animations_title">Animations</string>
-    <string name="animations_summary">Enable or disable animations (off for e-ink displays)</string>
+    <string name="animations_summary">Enable or disable animations</string>
     <string name="lock_portrait_title">Lock Portrait</string>
     <string name="eboard_density_title">eBoard display size</string>
     <string name="eboard_density_summary">Zoom the widget board: 100% matches the system display size.</string>
@@ -32,7 +32,6 @@
     <string name="eboard_empty_hint">The board is empty.\nTap “Add widget” to pin a widget.</string>
     <string name="eboard_edit_hint">Drag ▢ to resize · ✕ removes · press empty space to end</string>
     <string name="eboard_edit_remove">Remove</string>
-    <string name="eboard_edit_height">Height</string>
     <string name="eboard_edit_reconfigure">Set up</string>
     <string name="eboard_taps_on">Tap: on</string>
     <string name="eboard_taps_double">Tap: double</string>

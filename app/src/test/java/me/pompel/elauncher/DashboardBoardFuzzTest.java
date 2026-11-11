@@ -148,7 +148,7 @@ public class DashboardBoardFuzzTest {
         for (int pos = 0; pos < rows; pos++) {
             int h = a.rowHeightDp(pos);
             assertTrue("step " + step + ": height " + h + " out of range",
-                    DashboardActivity.MIN_HEIGHT_DP <= h && h <= DashboardActivity.MAX_HEIGHT_DP);
+                    WidgetPrefs.MIN_HEIGHT_DP <= h && h <= WidgetPrefs.MAX_HEIGHT_DP);
         }
         boolean edit = a.isEditMode();
         if (rows == 0) {
@@ -165,7 +165,7 @@ public class DashboardBoardFuzzTest {
     public void randomInteractionSequencesHoldInvariants() {
         start();
         for (int step = 0; step < 250; step++) {
-            int op = random.nextInt(6);
+            int op = random.nextInt(5);
             DashboardActivity a = activity();
             int rows = a.rowCount();
             boolean edit = a.isEditMode();
@@ -183,19 +183,11 @@ public class DashboardBoardFuzzTest {
                         idle();
                     }
                     break;
-                case 3: // resize (within range)
-                    if (rows > 0) {
-                        int dp = DashboardActivity.MIN_HEIGHT_DP + random.nextInt(
-                                DashboardActivity.MAX_HEIGHT_DP - DashboardActivity.MIN_HEIGHT_DP + 1);
-                        a.applyRowHeight(random.nextInt(rows), dp);
-                        idle();
-                    }
-                    break;
-                case 4: // edit mode toggle
+                case 3: // edit mode toggle
                     if (edit) a.exitEditMode();
                     else if (rows > 0) a.enterEditMode();
                     break;
-                case 5: // occasionally relaunch the board
+                case 4: // occasionally relaunch the board
                     if (random.nextInt(20) == 0) {
                         start();
                         break;
@@ -224,28 +216,11 @@ public class DashboardBoardFuzzTest {
         invariants(-1);
     }
 
-    /** Symbolic boundaries: resize clamps into MIN..MAX even with extreme dp. */
-    @Test
-    public void resizeClampsToRange() {
-        start();
-        addWidget();
-        activity().applyRowHeight(0, 10000);
-        assertEquals(DashboardActivity.MAX_HEIGHT_DP, activity().rowHeightDp(0));
-        activity().applyRowHeight(0, 10);
-        assertEquals(DashboardActivity.MIN_HEIGHT_DP, activity().rowHeightDp(0));
-        activity().applyRowHeight(-1, 300);
-        activity().applyRowHeight(7, 300);
-        idle();
-        invariants(-2);
-    }
-
-    /** Removing from the board cleans the stored height (no stale entries). */
     @Test
     public void removeCleansStoredHeight() {
         start();
         addWidget();
-        activity().applyRowHeight(0, 300);
-        assertEquals(300, activity().rowHeightDp(0));
+        assertEquals(WidgetPrefs.DEFAULT_HEIGHT_DP, activity().rowHeightDp(0));
         removeAt(0);
         addWidget();
         assertEquals(WidgetPrefs.DEFAULT_HEIGHT_DP, activity().rowHeightDp(0));

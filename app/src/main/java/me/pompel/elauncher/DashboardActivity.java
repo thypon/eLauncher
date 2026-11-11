@@ -5,7 +5,6 @@ import android.appwidget.AppWidgetProviderInfo;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
-import android.content.res.TypedArray;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
@@ -34,7 +33,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import me.pompel.elauncher.widget.ResizeOverlay;
 import me.pompel.elauncher.widget.WidgetEntry;
 import me.pompel.elauncher.widget.WidgetHost;
 import me.pompel.elauncher.widget.WidgetHostView;
@@ -52,8 +50,8 @@ import me.pompel.elauncher.widget.WidgetTaps;
  * filling the board width. How a widget handles touches is per-widget
  * (WidgetTaps): on, double tap, or off — in the latter modes the touches go
  * to the board as if the widget weren't there. A long press anywhere on a
- * widget enters that widget's edit mode: an edit bar (remove, height, tap
- * mode, set up) appears above it with a dashed resize frame; keeping the
+ * widget enters that widget's edit mode: an edit bar (remove, tap mode, set
+ * up) appears above it; keeping the
  * finger down after the long press drags the widget to reorder the stack.
  * Holding empty board space opens the widget adder popover; pressing empty
  * space leaves edit mode. The add button exists only on an empty board.
@@ -64,17 +62,12 @@ public class DashboardActivity extends AppCompatActivity {
     private static final int REQUEST_PICK = 1;
     private static final int REQUEST_BIND = 2;
     private static final int REQUEST_CONFIGURE = 3;
-    /** Range of a widget row height in dp, used by the resize handle. */
-    public static final int MIN_HEIGHT_DP = WidgetPrefs.MIN_HEIGHT_DP;
-    public static final int MAX_HEIGHT_DP = WidgetPrefs.MAX_HEIGHT_DP;
     /** Hold duration that opens the adder on empty board space. */
     public static final long HOLD_MS = 700;
     /** Movement (px) that cancels a pending hold. */
     private static final float HOLD_CANCEL_SLOP_PX = 30;
     /** Tag of the edit bar row inside the stack (rows carry an Integer id). */
     private static final String EDIT_BAR_TAG = "eboard_edit_bar";
-    /** Tag of the dashed resize frame inside the edited row. */
-    private static final String RESIZE_OVERLAY_TAG = "eboard_resize_overlay";
 
     private WidgetHost host;
     private AppWidgetManager widgets;
@@ -252,22 +245,15 @@ public class DashboardActivity extends AppCompatActivity {
     }
 
     /** A plain context for widget view creation: the activity context's
-     * LayoutInflater carries the AppCompat view factory, and RemoteViews
-     * reflection rejects the substituted classes it produces
-     * (AppCompatImageView) with "Couldn't add widget". This wrapper serves
-     * a CLONED inflater — cloneInContext does not carry the factories. */
+     * LayoutInflater carries the AppCompat view factory (and cloneInContext
+     * copies factories, so a cloned activity inflater is no way out), and
+     * RemoteViews reflection rejects the substituted classes it produces
+     * (AppCompatImageView) with "Couldn't add widget" — its setImageResource
+     * override lacks the @RemotableViewMethod annotation the framework
+     * requires. Widgets must inflate through the application context's
+     * plain system inflater, which has no view factory. */
     private android.content.Context plainWidgetContext() {
-        return new android.content.ContextWrapper(this) {
-            @Override
-            public Object getSystemService(String name) {
-                if (Context.LAYOUT_INFLATER_SERVICE.equals(name)) {
-                    android.view.LayoutInflater base = (android.view.LayoutInflater)
-                            getBaseContext().getSystemService(Context.LAYOUT_INFLATER_SERVICE);
-                    return base.cloneInContext(this);
-                }
-                return super.getSystemService(name);
-            }
-        };
+        return getApplicationContext();
     }
 
     /** Rebuilds the stack from the persisted widget list, dropping widgets
@@ -323,8 +309,7 @@ public class DashboardActivity extends AppCompatActivity {
     }
 
     /** Switches exactly the given widget into edit mode (Olauncher style):
-     * an edit bar appears above its row, plus a dashed resize frame once
-     * "Height" is chosen. */
+     * an edit bar appears above its row. */
     void enterEditMode(int id) {
         if (editingWidgetId == id) return;
         exitEditMode();
@@ -341,7 +326,6 @@ public class DashboardActivity extends AppCompatActivity {
         editingWidgetId = -1;
         View bar = boardStack.findViewWithTag(EDIT_BAR_TAG);
         if (bar != null) boardStack.removeView(bar);
-        dismissResizeOverlay();
         updateUiState();
     }
 
@@ -354,9 +338,8 @@ public class DashboardActivity extends AppCompatActivity {
         if (rowCount() > 0) enterEditMode(rowIdAt(0));
     }
 
-    /** The bar shown above a widget in edit mode: remove, height (resize
-     * frame), tap-mode cycle, and set up (only for widgets that need
-     * configuring). */
+    /** The bar shown above a widget in edit mode: remove, tap-mode cycle,
+     * and set up (only for widgets that need configuring). */
     private LinearLayout editBar(WidgetEntry entry) {
         LinearLayout bar = new LinearLayout(this);
         bar.setTag(EDIT_BAR_TAG);
@@ -374,12 +357,6 @@ public class DashboardActivity extends AppCompatActivity {
         remove.setElevation(dp(6));
         remove.setOnClickListener(v -> removeWidget(entry.id()));
         bar.addView(remove, cell);
-
-        Button height = new Button(this);
-        height.setTag(R.id.resize_handle);
-        height.setText(R.string.eboard_edit_height);
-        height.setOnClickListener(v -> toggleResizeOverlay(entry.id()));
-        bar.addView(height, cell);
 
         Button taps = new Button(this);
         taps.setTag(R.id.taps_button);
@@ -463,15 +440,6 @@ public class DashboardActivity extends AppCompatActivity {
     public void moveBoardRow(int from, int to) {
         store.move(from, to);
         rebuildBoard();
-    }
-
-    /** Applies a new row height in dp, persisting it and resizing the widget;
-     * the height is clamped into MIN..MAX and invalid positions are no-ops. */
-    public void applyRowHeight(int position, int heightDp) {
-        if (position < 0 || position >= rowCount()) return;
-        int id = rowIdAt(position);
-        store.setHeight(id, heightDp);
-        applyRowHeightPx(id, store.heightAt(position));
     }
 
     public int rowHeightDp(int position) {
@@ -560,16 +528,6 @@ public class DashboardActivity extends AppCompatActivity {
         rebuildBoard();
     }
 
-    private void applyRowHeightPx(int id, int heightDp) {
-        View row = rows.get(id);
-        if (row == null) return;
-        WidgetHostView hv = (WidgetHostView) ((ViewGroup) row).getChildAt(0);
-        row.getLayoutParams().height = (int) dp(heightDp);
-        row.setLayoutParams(row.getLayoutParams());
-        hv.getLayoutParams().height = (int) dp(heightDp);
-        hv.updateSize(boardWidthDp(), heightDp);
-    }
-
     // ---- drag-to-reorder (Olauncher's drag after long press) --------------------------------
 
     /** Moves the dragged row under the finger, swapping it past neighbor rows
@@ -640,42 +598,6 @@ public class DashboardActivity extends AppCompatActivity {
     }
 
     // ---- resize frame (Olauncher's resize overlay, vertical only) ---------------------------
-
-    private void toggleResizeOverlay(int id) {
-        View row = rows.get(id);
-        if (row == null) return;
-        if (row.findViewWithTag(RESIZE_OVERLAY_TAG) != null) {
-            dismissResizeOverlay();
-            return;
-        }
-        View editedRow = rows.get(editingWidgetId);
-        if (editedRow != row) return;
-        ResizeOverlay overlay = new ResizeOverlay(this);
-        overlay.setTag(RESIZE_OVERLAY_TAG);
-        overlay.setLayoutParams(new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-        TypedArray ta = obtainStyledAttributes(new int[]{androidx.appcompat.R.attr.colorPrimary});
-        overlay.setColor(ta.getColor(0, 0xFF888888));
-        ta.recycle();
-        overlay.setOnResize(growHeight -> {
-            int startDp = store.heightAt(positionOf(id));
-            int h = Math.max(MIN_HEIGHT_DP, Math.min(MAX_HEIGHT_DP,
-                    startDp + Math.round(growHeight / getResources().getDisplayMetrics().density)));
-            applyRowHeightPx(id, h);
-        });
-        overlay.setOnResizeEnd(() -> store.setHeight(id, Math.round(
-                rows.get(id).getHeight() / getResources().getDisplayMetrics().density)));
-        overlay.setOnMove(dy -> dragRow(row, dy));
-        overlay.setOnMoveEnd(dy -> endDrag(row, dy));
-        ((ViewGroup) row).addView(overlay);
-    }
-
-    private void dismissResizeOverlay() {
-        for (View row : new ArrayList<>(rows.values())) {
-            View overlay = row.findViewWithTag(RESIZE_OVERLAY_TAG);
-            if (overlay != null) ((ViewGroup) row).removeView(overlay);
-        }
-    }
 
     private int boardWidthDp() {
         DisplayMetrics dm = getResources().getDisplayMetrics();

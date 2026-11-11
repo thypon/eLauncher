@@ -63,14 +63,14 @@ Feature: Settings screen
     When I toggle the dark mode switch
     Then the dark mode preference is stored as "true"
 
-  Scenario: Animations are disabled by default
+  Scenario: Animations are enabled by default
     Given the settings screen is open
-    Then the animations switch is off
+    Then the animations switch is on
 
   Scenario: Toggling animations stores the preference
     Given the settings screen is open
     When I toggle the animations switch
-    Then the animations preference is stored as "true"
+    Then the animations preference is stored as "false"
 
   Scenario: Changing the number of apps
     Given the settings screen is open

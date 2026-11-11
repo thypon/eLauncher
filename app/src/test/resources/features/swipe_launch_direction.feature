@@ -11,27 +11,22 @@ Feature: Directional swipe launch animation
     And the launcher is started
 
   Scenario: Rightward fling pulls the left-side app in from the left
-    Given animations are enabled
     When I fling right on the home screen
     Then the launched activity animates in from the left
 
   Scenario: Leftward fling pulls the right-side app in from the right
-    Given animations are enabled
     When I fling left on the home screen
     Then the launched activity animates in from the right
 
   Scenario: Left edge tap launching the camera animates in from the left
-    Given animations are enabled
     When I tap the left screen edge and press back
     Then the launched activity animates in from the left
 
   Scenario: Right edge tap launching the browser animates in from the right
-    Given animations are enabled
     When I tap the right screen edge and press back
     Then the launched activity animates in from the right
 
   Scenario: Tapping a home screen slot keeps the default system animation
-    Given animations are enabled
     And the launcher has these apps installed:
       | Cool |
     And home slot 0 is assigned to "Cool"

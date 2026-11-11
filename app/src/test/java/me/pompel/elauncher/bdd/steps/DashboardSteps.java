@@ -388,19 +388,4 @@ public class DashboardSteps {
         assertEquals(order, world.storedBoardIdsAsString());
     }
 
-    @When("the widget is resized to {int}dp")
-    public void resizeWidget(int dp) {
-        world.dashboard().applyRowHeight(0, dp);
-        world.idle();
-    }
-
-    @Then("the widget height is stored as {int}dp")
-    public void widgetHeightStored(int dp) {
-        assertEquals(dp, world.storedHeight(0));
-    }
-
-    @Then("the widget is rendered {int}dp tall")
-    public void widgetRenderedTall(int dp) {
-        assertEquals(dp, world.renderedRowHeightDp(0));
-    }
 }
