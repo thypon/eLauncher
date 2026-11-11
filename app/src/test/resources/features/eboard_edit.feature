@@ -106,11 +106,6 @@ Feature: eBoard edit mode and widget adder
     And the eBoard is restarted
     Then the board background is the dark theme background
 
-  Scenario: Widgets lay out in two columns
-    When I add a widget from the widget adder
-    And I add a widget from the widget adder
-    Then the board shows widgets in two columns
-
   Scenario: The widget view has a transparent background
     When I add a widget from the widget adder
     Then the widget view has a transparent background

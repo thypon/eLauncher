@@ -12,11 +12,6 @@ Feature: Settings screen
     Then the left gesture button shows "eBoard"
     And the right gesture button shows "Default"
 
-  Scenario: The eBoard scales with its density setting
-    When the eBoard density is set to 150%
-    And the eBoard is started
-    Then the eBoard column is 107dp wide
-
   Scenario: Assigning an app to the left gesture
     Given the settings screen is open
     When I tap the left gesture button

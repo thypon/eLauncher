@@ -17,6 +17,17 @@ Feature: eBoard widgets
     Then a widget row is on the board
     And the widget is remembered by the board
 
+  Scenario: A configurable widget is set up before it lands
+    Given a "Digital" widget provider with a configure screen is installed
+    When I tap the add widget button
+    And the widget adder popover opens
+    And I select the "Digital" widget kind
+    And the adder binding resolves
+    Then the system configure activity opens
+    When the widget is configured
+    Then a widget row is on the board
+    And the widget is remembered by the board
+
   Scenario: Cancelling the popover keeps the board empty
     When I tap the add widget button
     And the widget adder popover opens
