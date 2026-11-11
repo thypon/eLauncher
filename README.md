@@ -1,7 +1,7 @@
 # eLauncher
 
 <p align="center">
-  <img src="assets/logo.svg" width="140" alt="eLauncher logo"/>
+  <img src="assets/logo_rounded.png" width="140" alt="eLauncher logo"/>
 </p>
 
 eLauncher is an extremely lightweight and minimal launcher for Android, based on NoLauncher and inspired by [OLauncher Light](https://github.com/tanujnotes/Ultra/), and OLauncher in general. It is even more barebones than OLauncher Light, and aims to provide only the most basic features.
@@ -36,6 +36,12 @@ You can also add the repository to the [F-Droid client](https://f-droid.org/) to
 ```
 https://thypon.github.io/eLauncher/fdroid/repo?fingerprint=2d19154ca98ad6d062cf0bfccdb2721536451b1d9a11b3f3690cbd9cf07f6555
 ```
+
+Or scan the QR code from your phone (e.g. in the F-Droid client's repository screen):
+
+<p align="center">
+  <img src="assets/fdroid_repo_qr.png" width="180" alt="QR code for the F-Droid repository URL"/>
+</p>
 
 The SHA-256 fingerprint of the repository signing key is `2d19154ca98ad6d062cf0bfccdb2721536451b1d9a11b3f3690cbd9cf07f6555` (also printed in the summary of every run of the [F-Droid repo workflow](https://github.com/thypon/eLauncher/actions/workflows/fdroid-repo.yml)). Versions are built automatically on every push to master; the 30 newest builds are kept in the repository.
 
