@@ -1,6 +1,7 @@
 package me.pompel.elauncher.bdd.steps;
 
 import android.content.Intent;
+import android.provider.Browser;
 import io.cucumber.java.en.Then;
 import io.cucumber.java.en.When;
 import me.pompel.elauncher.AppLink;
@@ -8,7 +9,6 @@ import me.pompel.elauncher.AppLink;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertTrue;
 
 /** Steps for the user-added link targets shared by the gesture pickers and
  * the home screen slot picker. */
@@ -42,8 +42,8 @@ public class LinkSteps {
     public void linkBringsBrowserForward() {
         Intent started = world.nextStartedActivity();
         assertNotNull("no link intent was started", started);
-        assertTrue("the link launch must reuse the open browser window",
-            (started.getFlags() & Intent.FLAG_ACTIVITY_REORDER_TO_FRONT) != 0);
+        assertEquals("the link launch must reuse the browser tab opened by this app",
+            world.appContext().getPackageName(), started.getStringExtra(Browser.EXTRA_APPLICATION_ID));
     }
 
     @Then("the {word} gesture stores the link {string} at {string}")
