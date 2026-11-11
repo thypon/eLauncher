@@ -51,3 +51,9 @@ Feature: Home screen slots
     And I replace the name with "My Gamma" and confirm
     Then home slot 1 is labeled "My Gamma"
     And the assignment for slot 1 is stored with app "Gamma"
+
+  Scenario: The slot picker shows an icon per app
+    Given the home screen has 2 slots configured
+    And the launcher is started
+    When I long-press home slot 0
+    Then every app in the picker shows an icon

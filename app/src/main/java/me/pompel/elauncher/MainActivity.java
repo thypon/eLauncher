@@ -59,7 +59,6 @@ public class MainActivity extends AppCompatActivity {
     private static final String LOCK_PORTRAIT = "lock_portrait_preference";
 
     private ArrayList<App> appList;
-    private ArrayList<SpannableString> appNames;
     private EditText search;
     private SharedPreferences prefs;
 
@@ -91,8 +90,6 @@ public class MainActivity extends AppCompatActivity {
         }
         appList.sort((app1, app2) -> app1.appName.toString().compareToIgnoreCase(app2.appName.toString()));
         for (App app : appList) {
-            appNames.add(app.appName);
-
             if (activeProcessPackages.contains(app.packageId)) {
                 app.appName.setSpan(new StyleSpan(Typeface.BOLD), 0, app.appName.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
             }
@@ -313,7 +310,6 @@ public class MainActivity extends AppCompatActivity {
         LauncherTheme.applySystemBars(this);
 
         appList = new ArrayList<>();
-        appNames = new ArrayList<>();
         loadApps();
 
         RecyclerView recyclerView = findViewById(R.id.recycler_view);
@@ -381,7 +377,6 @@ public class MainActivity extends AppCompatActivity {
         LinearLayout homescreen = findViewById(R.id.HomeScreen);
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
 
-        CharSequence[] alertApps = appNames.toArray(new CharSequence[0]);
         int i = 0;
         for (i = 0; i < prefs.getInt(NUMBER_OF_APPS, 8); i++) {
             TextView textView = new TextView(this);
@@ -394,13 +389,15 @@ public class MainActivity extends AppCompatActivity {
             textView.setLayoutParams(params);
             textView.setOnLongClickListener(v -> {
                 loadApps();
+                List<AppPickerAdapter.AppRow> rows = new ArrayList<>();
+                for (App app : appList) rows.add(new AppPickerAdapter.AppRow(app.appName.toString(), app.packageId));
                 AlertDialog.Builder builder = new AlertDialog.Builder(MainActivity.this);
                 builder.setTitle("Select app");
-                builder.setItems(alertApps, (dialog, which) -> {
+                builder.setAdapter(new AppPickerAdapter(MainActivity.this, rows), (dialog, which) -> {
                     AlertDialog.Builder builder1 = new AlertDialog.Builder(MainActivity.this);
                     builder1.setTitle("Set app name");
                     final EditText input = new EditText(MainActivity.this);
-                    input.setText(appNames.get(which));
+                    input.setText(appList.get(which).appName);
                     builder1.setView(input);
                     input.setTag(appList.get(which).packageId);
                     builder1.setPositiveButton("Add", (dialog1, which1) -> {
