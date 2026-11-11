@@ -4,4 +4,6 @@
     <item name="resize_handle" type="id" />
     <item name="reconfigure_handle" type="id" />
     <item name="hold_overlay" type="id" />
+    <item name="resize_overlay" type="id" />
+    <item name="taps_button" type="id" />
 </resources>

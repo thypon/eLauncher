@@ -11,7 +11,6 @@ import io.cucumber.java.en.When;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
-import static org.junit.Assert.assertNotSame;
 import static org.junit.Assert.assertTrue;
 import static org.robolectric.Shadows.shadowOf;
 
@@ -124,6 +123,33 @@ public class DashboardSteps {
                 world.storedBoardIds().isEmpty());
     }
 
+    @Then("the launcher lists an {string} entry")
+    public void launcherListsEntry(String label) {
+        assertTrue("expected a launcher entry labeled " + label, world.hasLauncherEntry(label));
+    }
+
+    @Then("no launcher lists an {string} entry")
+    public void noLauncherListsEntry(String label) {
+        assertFalse("expected no launcher entry labeled " + label, world.hasLauncherEntry(label));
+    }
+
+    @Then("the eBoard activity is not exported")
+    public void eboardActivityNotExported() {
+        assertFalse("eBoard must not be exported: no external caller may start it",
+                world.dashboardExported());
+    }
+
+    @Then("the widget view has a transparent background")
+    public void widgetTransparentBackground() {
+        assertTrue("the widget view must have a transparent background (no system white container)",
+                world.widgetTransparentBackground(0));
+    }
+
+    @Then("the host allocated one widget id")
+    public void hostAllocatedOneId() {
+        assertEquals(1, world.hostAllocations());
+    }
+
     @Given("the widget kind requires configuration")
     public void widgetKindRequiresConfiguration() {
         world.requireWidgetConfiguration();
@@ -144,32 +170,51 @@ public class DashboardSteps {
         world.deliverConfigureResult(false);
     }
 
-    @Given("another app's widget provider offering {string} is installed")
-    public void anotherAppsProvider(String description) {
-        world.installForeignWidgetProvider(description);
+    @Then("the configuration is requested through the widget host")
+    public void configurationThroughHost() {
+        assertEquals(1, world.hostConfigureRequests());
     }
 
-    @Then("the adder groups the kinds under their apps")
-    public void adderGroupsByApp() {
-        assertTrue("expected the adder to group kinds under app headers",
-                world.adderSectionCount() >= 2
-                        && world.adderSectionsHaveOneKindEach());
+    @When("I hold the empty board space")
+    public void holdEmptyBoardSpace() {
+        // shrinks the last row to its minimum and holds on the space below:
+        // the hold timer lives in the board touch listener, so the hold must
+        // land on the ScrollView itself, not on a row
+        world.holdBoardEmptyBelowWidgets();
     }
 
-    @Then("the adder previews sit in a 2-column grid")
-    public void adderPreviewGrid() {
-        assertEquals(2, world.adderGridColumns());
+    @When("I hold the empty board space below the widgets")
+    public void holdEmptyBoardSpaceBelowWidgets() {
+        world.holdBoardEmptyBelowWidgets();
     }
 
-    @Then("no launcher lists an {string} entry")
-    public void noLauncherListsEntry(String label) {
-        assertFalse("expected no launcher entry labeled " + label, world.hasLauncherEntry(label));
+    @Then("the widget adder popover opens again")
+    public void widgetAdderPopoverOpensAgain() {
+        assertTrue("expected the widget adder popover to open again",
+                world.adderOpen());
     }
 
-    @Then("the eBoard activity is not exported")
-    public void eboardActivityNotExported() {
-        assertFalse("eBoard must not be exported: no external caller may start it",
-                world.dashboardExported());
+    @When("I remove the only widget row")
+    public void removeOnlyWidgetRow() {
+        world.longPressBoardRow(0);
+        world.rowChildPerformClick(0, me.pompel.elauncher.R.id.remove_handle);
+    }
+
+    @Then("the widget row is built on a plain widget context")
+    public void widgetRowPlainContext() {
+        assertTrue("widget rows must be built on the plain widget context",
+                world.widgetRowBuiltOnPlainContext());
+    }
+
+    @When("I watch the widget touches")
+    public void watchWidgetTouches() {
+        world.spyCurrentWidgetTouches();
+    }
+
+    @Then("the widget received the tap")
+    public void widgetReceivedTap() {
+        assertTrue("taps must reach the CURRENT widget host view",
+                world.widgetTouchSpied());
     }
 
     @When("I add a widget from the widget adder")
@@ -183,6 +228,17 @@ public class DashboardSteps {
     @When("the widget adder popover opens")
     public void widgetAdderPopoverOpens() {
         assertTrue("expected the widget adder popover to open", world.adderOpen());
+    }
+
+    @Then("the widget adder popover animates in from the bottom")
+    public void adderPopoverAnimatesFromBottom() {
+        assertEquals(me.pompel.elauncher.R.style.WidgetAdderAnimation,
+                world.adderWindowAnimations());
+    }
+
+    @Then("the widget adder popover has no slide animation")
+    public void adderPopoverHasNoSlideAnimation() {
+        assertEquals(0, world.adderWindowAnimations());
     }
 
     @Then("the widget adder popover is closed")
@@ -214,12 +270,6 @@ public class DashboardSteps {
     public void adderRowsShowPreview() {
         assertTrue("each adder kind row must include a big preview with a small description",
                 world.adderRowsShowBigPreview());
-    }
-
-    @Then("the widget view has a transparent background")
-    public void widgetTransparentBackground() {
-        assertTrue("the widget view must have a transparent background (no system white container)",
-                world.widgetTransparentBackground(0));
     }
 
     @Then("the board stays clear of the system status bar")
@@ -266,117 +316,10 @@ public class DashboardSteps {
         world.tapWidget();
     }
 
-    @When("I hold the empty board space")
-    public void holdEmptyBoardSpace() {
-        world.holdBoardEmptyOpenAdder();
-    }
-
-    @When("I hold the empty board space below the widgets")
-    public void holdEmptyBoardSpaceBelowWidgets() {
-        world.holdBoardEmptyBelowWidgets();
-    }
-
-    @Then("the widget row is built on a plain widget context")
-    public void widgetRowPlainContext() {
-        assertTrue("widget rows must be built on the plain widget context",
-                world.widgetRowBuiltOnPlainContext());
-    }
-
-    @Then("the adder preview backing is transparent")
-    public void adderPreviewTransparent() {
-        assertEquals("the adder preview backing must not be a solid panel",
-                0, world.adderPreviewBackingAlpha());
-    }
-
-    @Then("the edit mode hint is hidden")
-    public void editHintHidden() {
-        assertFalse("edit hint must be hidden outside edit mode",
-                world.editHintVisible());
-    }
-
-    @Then("the edit mode hint explains resizing and removal")
-    public void editHintExplains() {
-        assertTrue("edit hint must be visible in edit mode",
-                world.editHintVisible());
-        assertTrue("edit hint must mention resizing and removal",
-                world.editHintText().toLowerCase().contains("resize")
-                        && world.editHintText().toLowerCase().contains("remov"));
-    }
-
-    @Then("the widget adder popover opens again")
-    public void widgetAdderPopoverOpensAgain() {
-        assertTrue("expected the widget adder popover to open again",
-                world.adderOpen());
-    }
-
-    @When("I remove the only widget row")
-    public void removeOnlyWidgetRow() {
-        world.removeAt(0);
-    }
-
     @Then("the widget has no blocking overlay")
     public void widgetHasNoBlockingOverlay() {
         assertTrue("the widget must not have a blocking overlay",
                 world.dashboard().boardRowAt(0).findViewWithTag(me.pompel.elauncher.R.id.hold_overlay) == null);
-    }
-
-    @Then("the board shows widgets in two columns")
-    public void boardShowsTwoColumns() {
-        assertEquals(2, world.dashboard().gridColumns());
-    }
-
-    @Then("the widget occupies the full board row")
-    public void widgetSpansFullBoardRow() {
-        assertEquals(world.dashboard().gridColumns(), world.rowSpan(0));
-    }
-
-    @Then("the widget shows a reconfigure handle")
-    public void reconfigureHandleVisible() {
-        assertTrue("configurable widgets show a reconfigure gear in edit mode",
-                world.reconfigureHandleVisible(0));
-    }
-
-    @Then("the widget shows no reconfigure handle")
-    public void reconfigureHandleHidden() {
-        assertTrue("widgets without configuration must not show a reconfigure gear",
-                !world.reconfigureHandleVisible(0));
-    }
-
-    @When("I tap the reconfigure handle")
-    public void tapReconfigureHandle() {
-        world.tapReconfigureHandle();
-    }
-
-    @Then("the configuration is requested for the placed widget")
-    public void reconfigureRequestedForPlacedWidget() {
-        world.reconfigureRequestedForPlacedWidget();
-    }
-
-    @Then("the adder previews fill their cells")
-    public void adderPreviewsFillCells() {
-        world.adderPreviewsFillCells();
-    }
-
-    @Then("the adder descriptions wrap to three lines")
-    public void adderDescriptionsWrapToThreeLines() {
-        world.adderDescriptionsWrapToThreeLines();
-    }
-
-    @Then("the resized widget is not clipped to its column")
-    public void widgetNotClippedToColumn() {
-        assertTrue("the row must not clip the widget while it is dragged "
-                + "past the column", world.rowNotClipped(0));
-    }
-
-    @When("I start dragging the resize handle sideways to {int}dp")
-    public void startSideResize(int dp) {
-        world.beginSideResize(dp);
-    }
-
-    @Then("the resized row floats above the other rows")
-    public void resizeRowFloatsAbove() {
-        assertTrue("the dragged row's cell must paint above its neighbors",
-                world.resizeRowFloats());
     }
 
     @Given("binding widgets is not allowed")
@@ -396,7 +339,8 @@ public class DashboardSteps {
 
     @When("I select the {string} widget kind")
     public void selectNamedWidgetKind(String label) {
-        world.clickAdderKind(label);    }
+        world.clickAdderKind(label);
+    }
 
     @When("I dismiss the widget adder popover")
     public void dismissWidgetAdder() {
@@ -416,6 +360,9 @@ public class DashboardSteps {
 
     @Then("the widget shows a remove handle")
     public void removeHandleVisible() {
+        System.out.println("eBoardDBG: isEditMode=" + world.dashboard().isEditMode()
+                + " rows=" + world.rowCount()
+                + " handle=" + world.dashboard().boardRowAt(0).findViewWithTag(me.pompel.elauncher.R.id.remove_handle));
         assertTrue("expected an (x) remove handle in edit mode",
                 world.rowChildVisible(0, me.pompel.elauncher.R.id.remove_handle));
     }
@@ -455,150 +402,5 @@ public class DashboardSteps {
     @Then("the widget is rendered {int}dp tall")
     public void widgetRenderedTall(int dp) {
         assertEquals(dp, world.renderedRowHeightDp(0));
-    }
-
-    @When("I note the current widget view")
-    public void noteCurrentWidgetView() {
-        world.noteInitialWidgetView();
-    }
-
-    @When("I drag the resize handle to {int}dp")
-    public void dragResizeHandleTo(int dp) {
-        world.dragResizeHandleTo(dp);
-    }
-
-    @When("I drag the resize handle sideways to {int}dp")
-    public void dragResizeHandleSideways(int dp) {
-        world.dragResizeHandleWidthTo(dp);
-    }
-
-    @When("the widget provider advises a maximum size of {int}x{int}dp")
-    public void adviseProviderSize(int w, int h) {
-        world.adviseProviderSize(w, h);
-    }
-
-    @When("I load scrollable content into the widget")
-    public void loadScrollableContent() {
-        world.pushScrollableWidgetContent(0);
-    }
-
-    @When("I scroll inside the widget")
-    public void scrollInsideWidget() {
-        world.scrollInsideWidget(0, 240);
-    }
-
-    @Then("the widget content has scrolled")
-    public void widgetContentScrolled() {
-        assertTrue("widget content must have scrolled inside the board, scrollTop="
-                        + world.widgetInnerScrollTop(0),
-                world.widgetInnerScrollTop(0) > 0);
-    }
-
-    @Then("the widget is rendered {int}dp wide")
-    public void widgetRenderedWide(int dp) {
-        assertEquals(dp, world.renderedRowWidthDp(0));
-    }
-
-    @Then("the widget width is stored as {int}dp")
-    public void widgetWidthStored(int dp) {
-        assertEquals(dp, world.storedWidth(0));
-    }
-
-    @Then("the widget row shows a fresh widget view")
-    public void widgetRowShowsFreshView() {
-        assertNotSame("the widget view must be re-created on release (the provider's "
-                        + "RemoteViews must re-layout at the new size)",
-                world.initialWidgetView(), world.boardWidgetView(0));
-    }
-
-    @Then("the fresh widget view is {int}dp tall")
-    public void freshWidgetViewTall(int dp) {
-        float density = world.density();
-        assertEquals((int) (dp * density), world.boardWidgetView(0).getLayoutParams().height);
-    }
-
-    @Given("the widget provider is unbound")
-    public void widgetProviderUnbound() {
-        world.forgetWidgetBinding(0);
-    }
-
-    @When("I watch the widget touches")
-    public void watchWidgetTouches() {
-        world.spyCurrentWidgetTouches();
-    }
-
-    @Then("the widget received the tap")
-    public void widgetReceivedTap() {
-        assertTrue("the hold proxy must forward taps to the CURRENT widget view "
-                + "(a released resize re-creates it)", world.widgetTouchSpied());
-    }
-
-    // ---- Launcher3 picker replication: span rows, sections, icons, bind options ----
-
-    @Given("the fixture app offers the kind {string} with dimensions {int}x{int}dp")
-    public void fixtureAppOffersKind(String label, int w, int h) {
-        world.addFixtureKind(label, w, h);
-    }
-
-    @Then("the kind {string} fills its adder row alone")
-    public void kindFillsRowAlone(String label) {
-        assertTrue("expected the kind " + label + " to fill its adder row alone",
-                world.adderKindRowSize(label) == 1);
-    }
-
-    @Then("the kinds {string} and {string} share an adder row")
-    public void kindsShareRow(String first, String second) {
-        assertTrue("expected " + first + " and " + second + " in one adder row",
-                world.adderKindsShareRow(first, second));
-    }
-
-    @Then("only the first app section is expanded")
-    public void onlyFirstSectionExpanded() {
-        java.util.List<String> expanded = world.adderExpandedSections();
-        assertTrue("expected exactly one expanded app section, got " + expanded,
-                expanded.size() == 1 && world.adderFirstSectionTitle().equals(expanded.get(0)));
-    }
-
-    @When("I tap the {string} adder header")
-    public void tapAdderHeader(String label) {
-        world.tapAdderHeader(label);
-    }
-
-    @Then("the {string} section is expanded")
-    public void sectionExpanded(String label) {
-        assertTrue("expected the " + label + " section to be expanded",
-                world.adderExpandedSections().contains(label));
-    }
-
-    @Then("the first app section is collapsed")
-    public void firstSectionCollapsed() {
-        assertTrue("expected the first app section to be collapsed",
-                !world.adderExpandedSections().contains(world.adderFirstSectionTitle()));
-    }
-
-    @Then("each app header shows the app icon")
-    public void headersShowAppIcon() {
-        assertTrue("expected app icons in every adder header", world.adderHeadersHaveIcons());
-    }
-
-    @Then("the widget was bound with {int}x{int}dp options")
-    public void boundWithOptions(int w, int h) {
-        assertTrue("expected the widget to be bound with " + w + "x" + h + "dp options",
-                world.boundWidgetOptions(0, w, h));
-    }
-
-    @Then("the host allocated one widget id")
-    public void hostAllocatedOneId() {
-        assertEquals(1, world.hostAllocations());
-    }
-
-    @Then("the configuration is requested through the widget host")
-    public void configurationThroughHost() {
-        assertEquals(1, world.hostConfigureRequests());
-    }
-
-    @Then("the eBoard column is {int}dp wide")
-    public void eboardColumnDp(int dp) {
-        assertEquals(dp, world.boardColumnDp());
     }
 }

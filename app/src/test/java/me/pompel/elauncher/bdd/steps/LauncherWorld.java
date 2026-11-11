@@ -56,45 +56,48 @@ public class LauncherWorld {
         android.preference.PreferenceManager.getDefaultSharedPreferences(appContext())
                 .edit().clear().commit();
         // the eBoard layout persists in its own prefs file and leaks across scenarios
-        appContext().getSharedPreferences(me.pompel.elauncher.BoardStore.PREFS_FILE, Context.MODE_PRIVATE)
+        appContext().getSharedPreferences(me.pompel.elauncher.widget.WidgetPrefs.PREFS_FILE, Context.MODE_PRIVATE)
                 .edit().clear().commit();
         // usage events accumulate in static shadow state and leak across scenarios
         org.robolectric.shadows.ShadowUsageStatsManager.reset();
-        // so do widget providers and bindings: every scenario of a feature
-        // shares one app widget manager, and stale providers made the adder
-        // list ghost kinds from earlier scenarios (mutations of the fresh
-        // fixture were invisible)
-        try {
-            android.appwidget.AppWidgetManager mgr = widgetManager();
-            org.robolectric.shadows.ShadowAppWidgetManager shadow = shadowOf(mgr);
-            for (android.appwidget.AppWidgetProviderInfo pi
-                    : new java.util.ArrayList<>(mgr.getInstalledProviders())) {
-                shadow.removeInstalledProvider(pi);
-            }
-            java.lang.reflect.Field f = org.robolectric.shadows.ShadowAppWidgetManager.class
-                    .getDeclaredField("widgetInfos");
-            f.setAccessible(true);
-            ((java.util.Map<?, ?>) f.get(shadow)).clear();
-        } catch (Exception e) {
-            // no app widget manager in this scenario's sandbox: nothing to clean
-        }
+        // the shadow widget manager leaks installed providers and bound
+        // widgets across scenarios of the same feature sandbox: clear them
+        // so every scenario registers its fixture provider from scratch
+        resetWidgetManagerShadow();
+        // the widget host shadow counts allocations/configure launches statically
         me.pompel.elauncher.unit.ShadowConfigureHost.resetAllocations();
+    }
+
+    /** Clears the shadow AppWidgetManager's provider/widget bookkeeping. */
+    private void resetWidgetManagerShadow() {
+        try {
+            android.appwidget.AppWidgetManager mgr =
+                    android.appwidget.AppWidgetManager.getInstance(appContext());
+            org.robolectric.shadows.ShadowAppWidgetManager shadow =
+                    org.robolectric.Shadows.shadowOf(mgr);
+            for (String name : new String[]{"installedProviders",
+                    "installedProvidersForProfile", "widgetInfos", "widgetPreviews"}) {
+                try {
+                    java.lang.reflect.Field f =
+                            org.robolectric.shadows.ShadowAppWidgetManager.class
+                                    .getDeclaredField(name);
+                    f.setAccessible(true);
+                    Object val = f.get(shadow);
+                    if (val instanceof java.util.Map) ((java.util.Map<?, ?>) val).clear();
+                    else if (val instanceof java.util.Collection)
+                        ((java.util.Collection<?>) val).clear();
+                    else if (val instanceof com.google.common.collect.Multimap)
+                        ((com.google.common.collect.Multimap<?, ?>) val).clear();
+                } catch (NoSuchFieldException ignored) {
+                }
+            }
+        } catch (Exception e) {
+            // no widget manager in this sandbox: nothing to clean
+        }
     }
 
     public Context appContext() {
         return androidx.test.core.app.ApplicationProvider.getApplicationContext();
-    }
-
-    /** Allocation count of the app widget host in this scenario (the stock
-     * shadow scripts one id; the counting subclass records every call). */
-    public int hostAllocations() {
-        return me.pompel.elauncher.unit.ShadowConfigureHost.allocations();
-    }
-
-    /** Configure launches that went through AppWidgetHost (the framework
-     * path the system service backs on device). */
-    public int hostConfigureRequests() {
-        return me.pompel.elauncher.unit.ShadowConfigureHost.configureRequests();
     }
 
     /** Registers fake launchable apps (label → com.fixtures.<lowercase>) in the package manager.
@@ -436,7 +439,7 @@ public class LauncherWorld {
         else if ("right".equals(direction)) dx = 60;
         else if ("up".equals(direction)) dy = -60;
         else throw new IllegalArgumentException("unknown direction: " + direction);
-        runTouchStream(a, x0, y0, dx, dy, 8, 16L);
+        runTouchStream(a, x0, y0, dx, 0, 8, 16L);
         idle();
     }
 
@@ -729,31 +732,6 @@ public class LauncherWorld {
         return visible[0];
     }
 
-    /** Dispatches the system home action at the launcher, like pressing the
-     * home button while the board is showing. */
-    public void callHomeLauncher() {
-        Intent home = new Intent(Intent.ACTION_MAIN)
-                .addCategory(Intent.CATEGORY_HOME)
-                .setPackage(appContext().getPackageName())
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        appContext().startActivity(home);
-        idle();
-    }
-
-    /** The home entry must declare singleTask: a home invocation then lands on
-     * the existing main view instance and clears whatever sits above it (the
-     * board, settings), instead of surfacing the board again. */
-    public boolean mainActivityIsSingleTask() {
-        android.content.pm.ActivityInfo info;
-        try {
-            info = appContext().getPackageManager().getActivityInfo(
-                    new android.content.ComponentName(appContext(), MainActivity.class), 0);
-        } catch (android.content.pm.PackageManager.NameNotFoundException e) {
-            throw new AssertionError("main activity not found", e);
-        }
-        return info.launchMode == android.content.pm.ActivityInfo.LAUNCH_SINGLE_TASK;
-    }
-
     /** Adapter data labels in drawer order. */
     public List<String> drawerLabels() {
         List<String> labels = new ArrayList<>();
@@ -997,11 +975,25 @@ public class LauncherWorld {
         org.robolectric.Shadows.shadowOf(Looper.getMainLooper()).idle();
     }
 
+    /** idles the looper long enough for delayed posts (HOLD_MS etc.). */
+    public void idle(long ms) {
+        org.robolectric.Shadows.shadowOf(Looper.getMainLooper())
+                .idleFor(ms, java.util.concurrent.TimeUnit.MILLISECONDS);
+    }
+
     // ---- eBoard dashboard helpers ---------------------------------------------------------
 
     public ActivityScenario<me.pompel.elauncher.DashboardActivity> dashboardScenario;
     /** ComponentName of the fake widget provider installed by installWidgetProvider(). */
     public android.content.ComponentName widgetProvider;
+    /** The fixture provider's AppWidgetProviderInfo (configure flow tweaks). */
+    private android.appwidget.AppWidgetProviderInfo lastProviderInfo;
+    /** The pending configure request's intent (configure-result delivery). */
+    private android.content.Intent lastConfigureIntent;
+    /** Touch actions seen by the home-gesture spy (tap-mode scenarios). */
+    public final List<Integer> homeGestureEvents = new ArrayList<>();
+    /** Set by spyCurrentWidgetTouches when the widget view sees a touch. */
+    public final boolean[] widgetTouchSpied = new boolean[1];
 
     public void startDashboard() {
         android.app.Dialog stale = org.robolectric.shadows.ShadowDialog.getLatestDialog();
@@ -1052,16 +1044,32 @@ public class LauncherWorld {
     /** Registers a fake app widget provider with the shadow AppWidgetManager;
      * the label (popover title) and description (popover kind line) can be
      * set for the widget-adder scenarios. */
-    /** The AppWidgetProviderInfo of the fixture provider, kept so tests can
-     * mutate its advised size fields after install. */
-    private android.appwidget.AppWidgetProviderInfo widgetInfo;
-
     public void installWidgetProvider(String label, String description) {
         widgetProvider = new android.content.ComponentName(appContext().getPackageName(),
                 "me.fixtures.WidgetProvider");
         android.appwidget.AppWidgetProviderInfo info = new android.appwidget.AppWidgetProviderInfo();
         info.provider = widgetProvider;
         info.label = label;
+        installProviderInfo(info, label);
+    }
+
+    /** Same fixture, with a configure activity so the widget must be set up
+     * before it lands on the board (Olauncher's configure flow). */
+    public void installConfigurableWidgetProvider(String label, String description) {
+        widgetProvider = new android.content.ComponentName(appContext().getPackageName(),
+                "me.fixtures.WidgetProvider");
+        android.appwidget.AppWidgetProviderInfo info = new android.appwidget.AppWidgetProviderInfo();
+        info.provider = widgetProvider;
+        info.label = label;
+        info.configure = new android.content.ComponentName(appContext().getPackageName(),
+                me.pompel.elauncher.SettingsActivity.class.getName());
+        installProviderInfo(info, label);
+    }
+
+    private void installProviderInfo(android.appwidget.AppWidgetProviderInfo info, String label) {
+        lastProviderInfo = info;
+        // a realistic clock-widget minimum: the board's default row height
+        info.minHeight = Math.round(200 * appContext().getResources().getDisplayMetrics().density);
         // providerInfo backs loadLabel(): a bare ActivityInfo with a
         // non-localized label keeps the popover title deterministic
         android.content.pm.ActivityInfo ai = new android.content.pm.ActivityInfo();
@@ -1081,181 +1089,37 @@ public class LauncherWorld {
             // no descriptionRes field: popover falls back to the app name
         }
         shadowOf(widgetManager()).addInstalledProvider(info);
-        widgetInfo = info;
-    }
-
-    /** Advises a maximum size for the fixture provider (dp): the widget
-     * should first appear at this "biggest variant, smallest pixels" size. */
-    public void adviseProviderSize(int widthDp, int heightDp) {
-        if (widgetInfo == null) throw new AssertionError("no fixture provider installed");
-        widgetInfo.maxResizeWidth = widthDp;
-        widgetInfo.maxResizeHeight = heightDp;
-        widgetInfo.minWidth = widthDp;
-        widgetInfo.minHeight = heightDp;
-        widgetInfo.minResizeWidth = 0;
-        widgetInfo.minResizeHeight = 0;
-    }
-
-    /** Marks the fixture kind as configurable: adding it must hand over to
-     * the provider's configure activity before the row lands (the flow
-     * Launch3 uses: bind first, then ACTION_APPWIDGET_CONFIGURE). */
-    public void requireWidgetConfiguration() {
-        if (widgetInfo == null) throw new AssertionError("no fixture provider installed");
-        widgetInfo.configure = new android.content.ComponentName(
-                widgetProvider.getPackageName(), "me.fixtures.Configure");
-        // the framework resolves the configure component before starting it:
-        // register a stub activity so the request is observable
-        org.robolectric.Shadows.shadowOf(appContext().getPackageManager())
-                .addActivityIfNotPresent(widgetInfo.configure);
-    }
-
-    /** A second provider under a different package, for app-section checks. */
-    public void installForeignWidgetProvider(String description) {
-        android.appwidget.AppWidgetProviderInfo info = new android.appwidget.AppWidgetProviderInfo();
-        info.provider = new android.content.ComponentName("com.other.apps",
-                "com.other.apps.OtherProvider");
-        info.label = description;
-        android.content.pm.ActivityInfo ai = new android.content.pm.ActivityInfo();
-        ai.packageName = "com.other.apps";
-        ai.nonLocalizedLabel = "Other Apps";
-        try {
-            java.lang.reflect.Field f = android.appwidget.AppWidgetProviderInfo.class.getField("providerInfo");
-            f.set(info, ai);
-        } catch (Exception ignored) {
-        }
-        shadowOf(widgetManager()).addInstalledProvider(info);
-    }
-
-    /** Asserts the last started activity-for-result is the widget configure
-     * flow for the reserved id, and remembers its request intent. */
-    private android.content.Intent lastConfigureIntent;
-
-    public void configureRequested() {
-        final org.robolectric.shadows.ShadowActivity.IntentForResult[] rec =
-                new org.robolectric.shadows.ShadowActivity.IntentForResult[1];
-        dashboardScenario.onActivity(a ->
-                rec[0] = org.robolectric.Shadows.shadowOf(a)
-                        .getNextStartedActivityForResult());
-        if (rec[0] == null) {
-            throw new AssertionError("no activity result request was started");
-        }
-        if (!android.appwidget.AppWidgetManager.ACTION_APPWIDGET_CONFIGURE
-                .equals(rec[0].intent.getAction())) {
-            throw new AssertionError("expected the widget configure intent, got "
-                    + rec[0].intent.getAction());
-        }
-        if (!rec[0].intent.hasExtra(
-                android.appwidget.AppWidgetManager.EXTRA_APPWIDGET_ID)) {
-            throw new AssertionError("configure intent must carry the app widget id");
-        }
-        lastConfigureIntent = rec[0].intent;
-    }
-
-    public void deliverConfigureResult(boolean ok) {
-        dashboardScenario.onActivity(a -> {
-            org.robolectric.shadows.ShadowActivity shadow =
-                    org.robolectric.Shadows.shadowOf(a);
-            android.content.Intent pending = lastConfigureIntent;
-            if (pending == null) {
-                // scenarios that do not assert the request first: the pending
-                // configure request is still in the activity's queue
-                org.robolectric.shadows.ShadowActivity.IntentForResult ir =
-                        shadow.getNextStartedActivityForResult();
-                if (ir == null || !android.appwidget.AppWidgetManager.ACTION_APPWIDGET_CONFIGURE
-                        .equals(ir.intent.getAction())) {
-                    throw new AssertionError("the widget configure flow was not started");
-                }
-                pending = ir.intent;
-            }
-            int id = pending.getIntExtra(
-                    android.appwidget.AppWidgetManager.EXTRA_APPWIDGET_ID, -1);
-            android.content.Intent data = null;
-            if (ok) {
-                data = new android.content.Intent();
-                data.putExtra(android.appwidget.AppWidgetManager.EXTRA_APPWIDGET_ID, id);
-            }
-            shadow.receiveResult(pending,
-                    ok ? android.app.Activity.RESULT_OK
-                            : android.app.Activity.RESULT_CANCELED,
-                    data);
-        });
-        idle();
-    }
-
-    /** Resource ids by name: the section/grid views ship with the fix, so
-     * the pre-fix red run must still compile (same pattern as edit_hint). */
-    private int titleId() {        return appContext().getResources().getIdentifier(
-                "adder_app_title", "id", appContext().getPackageName());
-    }
-
-    private int gridId() {
-        return appContext().getResources().getIdentifier(
-                "adder_grid", "id", appContext().getPackageName());
-    }
-
-    private int iconId() {
-        return appContext().getResources().getIdentifier(
-                "adder_app_icon", "id", appContext().getPackageName());
-    }
-
-    /** App sections in the adder: children of adder_list that carry a
-     * section header. */
-    public int adderSectionCount() {
-        int[] n = new int[1];
-        dashboardScenario.onActivity(a -> {
-            android.app.Dialog d = org.robolectric.shadows.ShadowDialog.getLatestDialog();
-            android.view.ViewGroup list = d.findViewById(me.pompel.elauncher.R.id.adder_list);
-            for (int i = 0; i < list.getChildCount(); i++) {
-                if (list.getChildAt(i).findViewById(
-                        titleId()) != null) n[0]++;
-            }
-        });
-        return n[0];
-    }
-
-    public boolean adderSectionsHaveOneKindEach() {
-        boolean[] ok = new boolean[] { true };
-        dashboardScenario.onActivity(a -> {
-            android.app.Dialog d = org.robolectric.shadows.ShadowDialog.getLatestDialog();
-            android.view.ViewGroup list = d.findViewById(me.pompel.elauncher.R.id.adder_list);
-            int sections = 0;
-            for (int i = 0; i < list.getChildCount(); i++) {
-                android.view.ViewGroup section = (android.view.ViewGroup) list.getChildAt(i);
-                if (section.findViewById(titleId()) == null) {
-                    continue;
-                }
-                sections++;
-                int kinds = 0;
-                for (int j = 0; j < section.getChildCount(); j++) {
-                    View child = section.getChildAt(j);
-                    if (child.findViewById(me.pompel.elauncher.R.id.kind_title) != null) {
-                        kinds++;
-                    }
-                }
-                if (kinds == 0) ok[0] = false;
-            }
-            if (sections == 0) ok[0] = false;
-        });
-        return ok[0];
-    }
-
-    /** Columns of the first preview grid in the adder. */
-    public int adderGridColumns() {
-        int[] cols = new int[] { -1 };
-        dashboardScenario.onActivity(a -> {
-            android.app.Dialog d = org.robolectric.shadows.ShadowDialog.getLatestDialog();
-            android.view.ViewGroup list = d.findViewById(me.pompel.elauncher.R.id.adder_list);
-            for (int i = 0; i < list.getChildCount() && cols[0] == -1; i++) {
-                android.widget.TableLayout grid = list.getChildAt(i).findViewById(
-                        gridId());
-                if (grid != null) cols[0] = 2; // fixed column budget of the adder table
-            }
-        });
-        return cols[0];
     }
 
     public void allowWidgetBinding(boolean allowed) {
         shadowOf(widgetManager()).setAllowedToBindAppWidgets(allowed);
+    }
+
+    /** The configure activity the fixture provider demands must have started:
+     * either the host-emulated ACTION_APPWIDGET_CONFIGURE launch (with the
+     * widget id extra) or a direct start of the configure component. */
+    public void assertConfigureStarted() {
+        org.robolectric.shadows.ShadowActivity.IntentForResult req = peekRequest();
+        if (req == null) throw new AssertionError("no activity started");
+        if (android.appwidget.AppWidgetManager.ACTION_APPWIDGET_CONFIGURE
+                .equals(req.intent.getAction())
+                && req.intent.hasExtra(android.appwidget.AppWidgetManager.EXTRA_APPWIDGET_ID)) {
+            return;
+        }
+        android.content.ComponentName c = req.intent.getComponent();
+        if (c == null || !c.getClassName().contains("SettingsActivity")) {
+            throw new AssertionError("expected the configure activity, got "
+                    + req.intent.getComponent());
+        }
+    }
+
+    /** The user finished the configure screen: RESULT_OK for the pending id. */
+    public void resolveConfigureOutcome() {
+        org.robolectric.shadows.ShadowActivity.IntentForResult req = takeRequest();
+        if (req == null) throw new AssertionError("no configure activity to resolve");
+        shadowOf(dashboard()).receiveResult(req.intent, android.app.Activity.RESULT_OK,
+                new Intent());
+        idle();
     }
 
     public boolean addWidgetButtonVisible() {
@@ -1276,6 +1140,64 @@ public class LauncherWorld {
         dashboardScenario.onActivity(a ->
                 a.onEmptySpaceLongPressed(0, 0)); // empty board: coordinates unused
         idle();
+    }
+
+    /** Real-touch hold on the empty space below the widget rows: DOWN on the
+     * board (the hold timer lives in the board touch listener), wait past
+     * HOLD_MS, then release — the adder popover must open. */
+    public void holdBoardEmptyBelowWidgets() {
+        dashboardScenario.onActivity(a -> {
+            if (a.rowCount() > 0) {
+                a.applyRowHeight(0, me.pompel.elauncher.DashboardActivity.MIN_HEIGHT_DP);
+            }
+            android.view.View board = a.findViewById(me.pompel.elauncher.R.id.board);
+            android.view.ViewGroup stack =
+                    (android.view.ViewGroup) a.findViewById(me.pompel.elauncher.R.id.board_stack);
+            int y = (stack != null && stack.getChildCount() > 0)
+                    ? Math.min(stack.getChildAt(stack.getChildCount() - 1).getBottom() + 120,
+                        board.getHeight() - 20)
+                    : Math.max(1, board.getHeight() - 20);
+            long now = android.os.SystemClock.uptimeMillis();
+            board.dispatchTouchEvent(android.view.MotionEvent.obtain(
+                    now, now, android.view.MotionEvent.ACTION_DOWN, 5, y, 0));
+        });
+        idle(800);
+        dashboardScenario.onActivity(a -> {
+            android.view.View board = a.findViewById(me.pompel.elauncher.R.id.board);
+            long now = android.os.SystemClock.uptimeMillis();
+            board.dispatchTouchEvent(android.view.MotionEvent.obtain(
+                    now, now, android.view.MotionEvent.ACTION_UP, 5, 10, 0));
+        });
+        idle();
+    }
+
+    /** Widget rows must be built on the plain (non-AppCompat-inflater)
+     * wrapper context: RemoteViews reflection rejects AppCompat classes. */
+    public boolean widgetRowBuiltOnPlainContext() {
+        boolean[] ok = new boolean[1];
+        dashboardScenario.onActivity(a -> {
+            android.content.Context ctx =
+                    ((android.view.ViewGroup) a.boardRowAt(0)).getChildAt(0).getContext();
+            ok[0] = ctx != a && ctx instanceof android.content.ContextWrapper;
+        });
+        return ok[0];
+    }
+
+    /** Spies direct touches on the current widget host view of row 0. */
+    public void spyCurrentWidgetTouches() {
+        widgetTouchSpied[0] = false;
+        dashboardScenario.onActivity(a -> {
+            View widget = a.widgetHostViewAt(0);
+            widget.setOnTouchListener((v, ev) -> {
+                widgetTouchSpied[0] = true;
+                return false;
+            });
+        });
+        idle();
+    }
+
+    public boolean widgetTouchSpied() {
+        return widgetTouchSpied[0];
     }
 
     public boolean adderOpen() {
@@ -1303,35 +1225,14 @@ public class LauncherWorld {
                 org.robolectric.shadows.ShadowDialog.getLatestDialog();
         LinearLayout list = latest.findViewById(me.pompel.elauncher.R.id.adder_list);
         for (int i = 0; i < list.getChildCount(); i++) {
-            View section = list.getChildAt(i);
-            for (View cell : adderKindCells(section)) {
-                TextView title = cell.findViewById(me.pompel.elauncher.R.id.kind_title);
-                TextView sub = cell.findViewById(me.pompel.elauncher.R.id.kind_sub);
-                if (label.contentEquals(title.getText().toString())
-                        && sub.getText().toString().contains(description)) return true;
-            }
+            View row = list.getChildAt(i);
+            TextView title = row.findViewById(me.pompel.elauncher.R.id.kind_title);
+            TextView sub = row.findViewById(me.pompel.elauncher.R.id.kind_sub);
+            if (title != null && sub != null
+                    && label.contentEquals(title.getText().toString())
+                    && sub.getText().toString().contains(description)) return true;
         }
         return false;
-    }
-
-    /** All kind cards inside an adder section (or a plain list row): any
-     * container whose first child is the kind preview (the card signature),
-     * in document order. */
-    private java.util.List<View> adderKindCells(View root) {
-        java.util.List<View> cells = new java.util.ArrayList<>();
-        java.util.ArrayDeque<View> queue = new java.util.ArrayDeque<>();
-        queue.add(root);
-        while (!queue.isEmpty()) {
-            View v = queue.poll();
-            if (v instanceof android.view.ViewGroup) {
-                android.view.ViewGroup g = (android.view.ViewGroup) v;
-                boolean isCard = g.getChildCount() > 0
-                        && g.getChildAt(0).getId() == me.pompel.elauncher.R.id.kind_preview;
-                if (isCard) cells.add(g);
-                for (int j = 0; j < g.getChildCount(); j++) queue.add(g.getChildAt(j));
-            }
-        }
-        return cells;
     }
 
     public boolean adderRowsShowPreview() {
@@ -1354,16 +1255,14 @@ public class LauncherWorld {
         if (list.getChildCount() == 0) return false;
         float density = appContext().getResources().getDisplayMetrics().density;
         for (int i = 0; i < list.getChildCount(); i++) {
-            View section = list.getChildAt(i);
-            for (View row : adderKindCells(section)) {
-                View preview = row.findViewById(me.pompel.elauncher.R.id.kind_preview);
-                TextView sub = row.findViewById(me.pompel.elauncher.R.id.kind_sub);
-                TextView title = row.findViewById(me.pompel.elauncher.R.id.kind_title);
-                if (preview == null || sub == null || title == null) return false;
-                // big preview slot and a description smaller than the title
-                if (preview.getWidth() < 100 * density) return false;
-                if (sub.getTextSize() >= title.getTextSize()) return false;
-            }
+            View row = list.getChildAt(i);
+            View preview = row.findViewById(me.pompel.elauncher.R.id.kind_preview);
+            TextView sub = row.findViewById(me.pompel.elauncher.R.id.kind_sub);
+            TextView title = row.findViewById(me.pompel.elauncher.R.id.kind_title);
+            if (preview == null || sub == null || title == null) return false;
+            // big preview slot and a description smaller than the title
+            if (preview.getWidth() < 100 * density) return false;
+            if (sub.getTextSize() >= title.getTextSize()) return false;
         }
         return true;
     }
@@ -1371,6 +1270,53 @@ public class LauncherWorld {
     public void setDarkModePreference(boolean on) {
         android.preference.PreferenceManager.getDefaultSharedPreferences(appContext())
                 .edit().putBoolean("dark_mode_preference", on).commit();
+    }
+
+    public void setAnimationsEnabled(boolean on) {
+        android.preference.PreferenceManager.getDefaultSharedPreferences(appContext())
+                .edit().putBoolean(me.pompel.elauncher.MainActivity.ANIMATIONS_PREF, on).commit();
+    }
+
+    /** The settings preference fragment, for preference-model lookups that
+     * survive RecyclerView row virtualization. */
+    private androidx.preference.PreferenceFragmentCompat settingsFragment() {
+        androidx.fragment.app.Fragment f = settingsActivity().getSupportFragmentManager()
+                .findFragmentById(me.pompel.elauncher.R.id.settings);
+        if (!(f instanceof androidx.preference.PreferenceFragmentCompat)) {
+            throw new AssertionError("settings preference fragment not found");
+        }
+        return (androidx.preference.PreferenceFragmentCompat) f;
+    }
+
+    public boolean animationsSwitchChecked() {
+        androidx.preference.TwoStatePreference pref = animationsSwitchPreference();
+        return pref.isChecked();
+    }
+
+    public void toggleAnimationsSwitch() {
+        androidx.preference.TwoStatePreference pref = animationsSwitchPreference();
+        // same persist+notify path the switch's click takes
+        pref.setChecked(!pref.isChecked());
+        idle();
+    }
+
+    private androidx.preference.TwoStatePreference animationsSwitchPreference() {
+        androidx.preference.Preference pref = settingsFragment()
+                .findPreference(me.pompel.elauncher.MainActivity.ANIMATIONS_PREF);
+        if (!(pref instanceof androidx.preference.TwoStatePreference)) {
+            throw new AssertionError("No animations switch preference");
+        }
+        return (androidx.preference.TwoStatePreference) pref;
+    }
+
+    /** windowAnimations of the board's widget-adder popover window (0 = none). */
+    public int adderWindowAnimations() {
+        int[] anims = new int[1];
+        dashboardScenario.onActivity(a -> {
+            android.view.Window w = ((me.pompel.elauncher.DashboardActivity) a).adderWindow();
+            anims[0] = w == null ? 0 : w.getAttributes().windowAnimations;
+        });
+        return anims[0];
     }
 
     public boolean boardBackgroundIsThemeBackground() {
@@ -1396,32 +1342,15 @@ public class LauncherWorld {
         return match[0];
     }
 
-    public boolean widgetTransparentBackground(int position) {
-        boolean[] transparent = new boolean[1];
-        dashboardScenario.onActivity(a -> {
-            View row = a.boardRowAt(position);
-            android.view.ViewGroup holder = (android.view.ViewGroup)
-                    a.findViewById(me.pompel.elauncher.R.id.board);
-            View widget = ((android.view.ViewGroup) row).getChildAt(0);
-            android.graphics.drawable.Drawable bg = widget.getBackground();
-            transparent[0] = bg == null
-                    || (bg instanceof android.graphics.drawable.ColorDrawable
-                        && ((android.graphics.drawable.ColorDrawable) bg).getColor() == 0);
-        });
-        return transparent[0];
-    }
-
     public void pressBoardEmpty() {
         dashboardScenario.onActivity(a -> {
             // with a small test display the widget may cover the board: shrink
             // the first row to its minimum so empty space exists below it
             if (a.rowCount() > 0) a.applyRowHeight(0,
                     me.pompel.elauncher.DashboardActivity.MIN_HEIGHT_DP);
-            // dispatch directly on the board: a ViewGroup.dispatchTouchEvent
-            // with DOWN always runs its own onInterceptTouchEvent, where the
-            // hold/exit logic lives
-            androidx.recyclerview.widget.RecyclerView board =
-                    a.findViewById(me.pompel.elauncher.R.id.board);
+            // dispatch directly on the board: the ScrollView is the touch
+            // target on empty board space, where the hold/exit logic lives
+            android.view.View board = a.findViewById(me.pompel.elauncher.R.id.board);
             long now = android.os.SystemClock.uptimeMillis();
             board.dispatchTouchEvent(android.view.MotionEvent.obtain(
                     now, now, android.view.MotionEvent.ACTION_DOWN, 5, 400, 0));
@@ -1462,7 +1391,7 @@ public class LauncherWorld {
     }
 
     public boolean removeHandleVisibleAndDark(int position) {
-        View handle = dashboard().boardRowAt(position).findViewWithTag(R.id.remove_handle);
+        View handle = rowOrEditBarChild(position, R.id.remove_handle);
         if (handle == null || handle.getVisibility() != View.VISIBLE) return false;
         // the badge must float: dark background + elevation shadow above the
         // widget (ink on ink with no lift = invisible)
@@ -1485,17 +1414,8 @@ public class LauncherWorld {
         if (list == null || list.getChildCount() == 0) {
             throw new AssertionError("widget adder popover has no kinds");
         }
-        // the list is app-sectioned now: the first kind card sits inside the
-        // first section's grid
-        for (int i = 0; i < list.getChildCount(); i++) {
-            java.util.List<View> cells = adderKindCells(list.getChildAt(i));
-            if (!cells.isEmpty()) {
-                cells.get(0).performClick();
-                idle();
-                return;
-            }
-        }
-        throw new AssertionError("widget adder popover has no kinds");
+        list.getChildAt(0).performClick();
+        idle();
     }
 
     public void clickAdderKind(String label) {
@@ -1503,13 +1423,12 @@ public class LauncherWorld {
                 org.robolectric.shadows.ShadowDialog.getLatestDialog();
         LinearLayout list = latest.findViewById(me.pompel.elauncher.R.id.adder_list);
         for (int i = 0; i < list.getChildCount(); i++) {
-            for (View cell : adderKindCells(list.getChildAt(i))) {
-                TextView title = cell.findViewById(me.pompel.elauncher.R.id.kind_title);
-                if (label.contentEquals(title.getText().toString())) {
-                    cell.performClick();
-                    idle();
-                    return;
-                }
+            View row = list.getChildAt(i);
+            TextView title = row.findViewById(me.pompel.elauncher.R.id.kind_title);
+            if (title != null && label.contentEquals(title.getText().toString())) {
+                row.performClick();
+                idle();
+                return;
             }
         }
         throw new AssertionError("no widget kind labeled " + label + " in the adder");
@@ -1532,8 +1451,27 @@ public class LauncherWorld {
             Intent result = new Intent().putExtra(
                     android.appwidget.AppWidgetManager.EXTRA_APPWIDGET_ID, id);
             shadowOf(dashboard()).receiveResult(req.intent, android.app.Activity.RESULT_OK, result);
+        } else {
+            // not a bind handoff (e.g. the widget's configure activity):
+            // keep it for the configure steps instead of consuming it
+            lastUnresolvedRequest = req;
         }
         idle();
+    }
+
+    private org.robolectric.shadows.ShadowActivity.IntentForResult lastUnresolvedRequest;
+
+    /** The pending for-result request a previous resolve left untouched:
+     * peek keeps it (assert), take clears it (resolve). */
+    private org.robolectric.shadows.ShadowActivity.IntentForResult peekRequest() {
+        if (lastUnresolvedRequest != null) return lastUnresolvedRequest;
+        return shadowOf(dashboard()).getNextStartedActivityForResult();
+    }
+
+    private org.robolectric.shadows.ShadowActivity.IntentForResult takeRequest() {
+        org.robolectric.shadows.ShadowActivity.IntentForResult req = peekRequest();
+        lastUnresolvedRequest = null;
+        return req;
     }
 
     public void assertSystemPickerStarted() {
@@ -1544,13 +1482,24 @@ public class LauncherWorld {
         }
     }
 
+    /** A row child, or — for edit-bar controls like the remove handle — a
+     * child of the bar shown above the edited row. */
+    public View rowOrEditBarChild(int position, int childTag) {
+        View row = dashboard().boardRowAt(position);
+        View child = row.findViewWithTag(childTag);
+        if (child == null && row.getParent() instanceof android.view.ViewGroup) {
+            child = ((android.view.ViewGroup) row.getParent()).findViewWithTag(childTag);
+        }
+        return child;
+    }
+
     public boolean rowChildVisible(int position, int childTag) {
-        View handle = dashboard().boardRowAt(position).findViewWithTag(childTag);
+        View handle = rowOrEditBarChild(position, childTag);
         return handle != null && handle.getVisibility() == View.VISIBLE;
     }
 
     public void rowChildPerformClick(int position, int childTag) {
-        View handle = dashboard().boardRowAt(position).findViewWithTag(childTag);
+        View handle = rowOrEditBarChild(position, childTag);
         if (handle == null) throw new AssertionError("no child tagged " + childTag);
         handle.performClick();
         idle();
@@ -1578,197 +1527,40 @@ public class LauncherWorld {
     }
 
     public int storedHeight(int position) {
-        int id = storedBoardIds().get(position);
-        return new me.pompel.elauncher.BoardStore(
-                appContext().getSharedPreferences(me.pompel.elauncher.BoardStore.PREFS_FILE,
-                        Context.MODE_PRIVATE)).size(id);
+        return widgetPrefs().heightAt(position);
     }
 
     public int renderedRowHeightDp(int position) {
         int[] h = new int[1];
         dashboardScenario.onActivity(a -> {
-            android.view.ViewGroup row = (android.view.ViewGroup) a
-                    .findViewById(me.pompel.elauncher.R.id.board);
-            // the container's child row: its widget child height, in dp
+            android.view.View row = a.boardRowAt(position);
             float density = a.getResources().getDisplayMetrics().density;
-            View child = row.getChildAt(0);
-            h[0] = child == null ? -1 : Math.round(child.getHeight() / density);
+            h[0] = row == null ? -1 : Math.round(row.getHeight() / density);
         });
         return h[0];
     }
 
-    /** Rendered width of the widget view of a row, in dp: board child is the
-     * item container, its child the row, the row's first child the widget. */
-    public int renderedRowWidthDp(int position) {
-        int[] w = new int[1];
-        dashboardScenario.onActivity(a -> {
-            android.view.ViewGroup board = (android.view.ViewGroup) a
-                    .findViewById(me.pompel.elauncher.R.id.board);
-            float density = a.getResources().getDisplayMetrics().density;
-            View container = board.getChildAt(position);
-            View widget = null;
-            if (container instanceof android.view.ViewGroup) {
-                View row = ((android.view.ViewGroup) container).getChildAt(0);
-                if (row instanceof android.view.ViewGroup) {
-                    widget = ((android.view.ViewGroup) row).getChildAt(0);
-                }
-            }
-            w[0] = widget == null ? -1 : Math.round(widget.getWidth() / density);
-        });
-        return w[0];
-    }
-
-    /** Persisted row width in dp for a widget id. */
-    public int storedWidth(int position) {
-        int id = storedBoardIds().get(position);
-        // reads the widths map directly: the store API ships with the fix
-        String raw = appContext()
-                .getSharedPreferences(me.pompel.elauncher.BoardStore.PREFS_FILE,
-                        Context.MODE_PRIVATE)
-                .getString("widget_widths", "");
-        for (String part : raw.split(",")) {
-            int eq = part.indexOf('=');
-            if (eq > 0 && part.substring(0, eq).trim().equals(String.valueOf(id))) {
-                try {
-                    return Integer.parseInt(part.substring(eq + 1).trim());
-                } catch (NumberFormatException e) {
-                    return -1;
-                }
-            }
-        }
-        return 0;
-    }
-
-    /** The grid span the row's position occupies: 1 = one column,
-     * 2 = the full row (the configured span count). Read from the
-     * span-size lookup so it does not depend on the laid-out frame. */
-    public int rowSpan(int position) {
-        int[] span = new int[1];
-        dashboardScenario.onActivity(a ->
-                span[0] = dashboard().rowSpan(position));
-        return span[0];
-    }
-
-    /** Writes the eBoard density percent into the default shared
-     * preferences (the Settings screen stores it the same way). */
-    public void setEboardDensityPercent(int percent) {
-        androidx.preference.PreferenceManager
-                .getDefaultSharedPreferences(appContext())
-                .edit()
-                .putInt("eboard_density_preference", percent)
-                .apply();
-    }
-
-    /** The board grid column width in dp under the current density
-     * setting. */
-    public int boardColumnDp() {
-        int[] w = new int[1];
-        dashboardScenario.onActivity(a -> w[0] = dashboard().boardColumnDp());
-        return w[0];
-    }
-
-    /** True when neither the row nor its grid cell clips the widget
-     * view: the widget must stay visible while a resize drag carries
-     * it past the column edge (the row only re-spans on release). */
-    public boolean rowNotClipped(int position) {
-        boolean[] ok = new boolean[1];
-        dashboardScenario.onActivity(a -> {
-            android.view.ViewGroup row =
-                    (android.view.ViewGroup) dashboard().boardRowAt(position);
-            android.view.ViewGroup cell = (android.view.ViewGroup) row.getParent();
-            ok[0] = !row.getClipChildren() && !cell.getClipChildren();
-        });
-        return ok[0];
-    }
-
-    /** Horizontal resize drag through the DECOR: same stream as the vertical
-     * variant, but the handle moves sideways. */
-    public void dragResizeHandleWidthTo(int targetDp) {
-        beginSideResize(targetDp);
-        endSideResize();
-    }
-
-    /** Starts a sideways resize drag and holds it (no release): the drag
-     * state stays live so mid-drag view state can be asserted. */
-    public void beginSideResize(int targetDp) {
-        dashboardScenario.onActivity(a -> {
-            android.view.ViewGroup row =
-                    (android.view.ViewGroup) dashboard().boardRowAt(0);
-            View handle = row.findViewWithTag(me.pompel.elauncher.R.id.resize_handle);
-            if (handle == null) throw new AssertionError("no resize handle: enter edit mode first");
-            int startDp = dashboard().rowWidthDp(0);
-            float density = a.getResources().getDisplayMetrics().density;
-            androidx.recyclerview.widget.RecyclerView board =
-                    a.findViewById(me.pompel.elauncher.R.id.board);
-            View parent = (View) board.getParent();
-            int w = Math.max(1, parent.getWidth());
-            int h = Math.max(1, parent.getHeight());
-            board.measure(
-                    View.MeasureSpec.makeMeasureSpec(w, View.MeasureSpec.EXACTLY),
-                    View.MeasureSpec.makeMeasureSpec(h, View.MeasureSpec.EXACTLY));
-            board.layout(0, 0, w, h);
-            View decor = a.getWindow().getDecorView();
-            int[] hl = new int[2]; handle.getLocationOnScreen(hl);
-            int[] dl = new int[2]; decor.getLocationOnScreen(dl);
-            float x0 = hl[0] - dl[0] + handle.getWidth() / 2f;
-            float y = hl[1] - dl[1] + handle.getHeight() / 2f;
-            float dx = (targetDp - startDp) * density;
-            long base = android.os.SystemClock.uptimeMillis();
-            decor.dispatchTouchEvent(android.view.MotionEvent.obtain(
-                    base, base, android.view.MotionEvent.ACTION_DOWN, x0, y, 0));
-            decor.dispatchTouchEvent(android.view.MotionEvent.obtain(
-                    base, base + 10, android.view.MotionEvent.ACTION_MOVE, x0 + dx / 2, y, 0));
-            decor.dispatchTouchEvent(android.view.MotionEvent.obtain(
-                    base, base + 16, android.view.MotionEvent.ACTION_MOVE, x0 + dx, y, 0));
-            sideResizeUp[0] = x0 + dx;
-            sideResizeUp[1] = y;
-        });
-        idle();
-    }
-
-    private final float[] sideResizeUp = new float[2];
-
-    /** Releases a drag started with beginSideResize. */
-    public void endSideResize() {
-        dashboardScenario.onActivity(a -> {
-            View decor = a.getWindow().getDecorView();
-            long now = android.os.SystemClock.uptimeMillis();
-            decor.dispatchTouchEvent(android.view.MotionEvent.obtain(
-                    now, now, android.view.MotionEvent.ACTION_UP,
-                    sideResizeUp[0], sideResizeUp[1], 0));
-        });
-        idle();
-    }
-
-    /** True while a sideways resize drag is live and the dragged row's
-     * grid cell paints above the other rows (the overflowing widget must
-     * not be covered by the neighbor cell). */
-    public boolean resizeRowFloats() {
-        boolean[] ok = new boolean[1];
-        dashboardScenario.onActivity(a -> {
-            android.view.ViewGroup row =
-                    (android.view.ViewGroup) dashboard().boardRowAt(0);
-            android.view.ViewGroup cell = (android.view.ViewGroup) row.getParent();
-            ok[0] = cell.getTranslationZ() > 0f;
-        });
-        return ok[0];
-    }
-
-    /** Seeds the board store directly (ids only, no binding) — for stale-widget scenarios. */
+    /** Seeds the board store directly (ids only, no binding) — for stale-widget
+     * scenarios. Deliberately writes the legacy BoardStore key so the
+     * WidgetPrefs migration is exercised on first read. */
     public void seedBoardIds(int... ids) {
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < ids.length; i++) {
             if (i > 0) sb.append(',');
             sb.append(ids[i]);
         }
-        appContext().getSharedPreferences(me.pompel.elauncher.BoardStore.PREFS_FILE, Context.MODE_PRIVATE)
-                .edit().putString(me.pompel.elauncher.BoardStore.KEY_IDS, sb.toString()).commit();
+        appContext().getSharedPreferences(me.pompel.elauncher.widget.WidgetPrefs.PREFS_FILE, Context.MODE_PRIVATE)
+                .edit().putString("widget_ids", sb.toString()).commit();
+    }
+
+    private me.pompel.elauncher.widget.WidgetPrefs widgetPrefs() {
+        return new me.pompel.elauncher.widget.WidgetPrefs(
+                appContext().getSharedPreferences(
+                        me.pompel.elauncher.widget.WidgetPrefs.PREFS_FILE, Context.MODE_PRIVATE));
     }
 
     public List<Integer> storedBoardIds() {
-        return new me.pompel.elauncher.BoardStore(
-                appContext().getSharedPreferences(me.pompel.elauncher.BoardStore.PREFS_FILE, Context.MODE_PRIVATE))
-                .ids();
+        return widgetPrefs().ids();
     }
 
     public int rowCount() {
@@ -1783,83 +1575,104 @@ public class LauncherWorld {
     }
 
     public void longPressBoardRow(int row) {
-        dashboardScenario.onActivity(a ->
-                a.boardRowAt(row).performLongClick());
-        idle();
+        holdBoardRow(row);
     }
 
-    /** Real-touch path: dispatches DOWN + hold + UP directly on the row's
-     * hold proxy (the board-level touch chain was already validated with the
-     * popover scenarios): the proxy must enter edit mode after HOLD_MS. */
+    /** Real-touch path: dispatches DOWN + hold + UP directly on the widget
+     * view, whose Olauncher-style dispatcher detects the long press itself
+     * and enters the widget's edit mode. */
     public void holdBoardRow(int row) {
         dashboardScenario.onActivity(a -> {
-            View proxy = a.boardRowAt(row).findViewWithTag(R.id.hold_overlay);
-            if (proxy == null) throw new AssertionError("no hold proxy on the row");
+            View widget = a.widgetHostViewAt(row);
             long now = android.os.SystemClock.uptimeMillis();
-            proxy.dispatchTouchEvent(android.view.MotionEvent.obtain(
+            widget.dispatchTouchEvent(android.view.MotionEvent.obtain(
                     now, now, android.view.MotionEvent.ACTION_DOWN, 10, 10, 0));
         });
         org.robolectric.Shadows.shadowOf(Looper.getMainLooper())
                 .idleFor(700 + 100, java.util.concurrent.TimeUnit.MILLISECONDS);
         dashboardScenario.onActivity(a -> {
-            View proxy = a.boardRowAt(row).findViewWithTag(R.id.hold_overlay);
+            View widget = a.widgetHostViewAt(row);
             long now = android.os.SystemClock.uptimeMillis();
-            proxy.dispatchTouchEvent(android.view.MotionEvent.obtain(
+            widget.dispatchTouchEvent(android.view.MotionEvent.obtain(
                     now, now, android.view.MotionEvent.ACTION_UP, 10, 10, 0));
         });
         idle();
     }
 
+    /** Keeps a widget held after the long press fired and drags it down past
+     * the next row (Olauncher's drag-to-reorder), then releases. */
+    public void dragBoardRowDown(int row) {
+        dashboardScenario.onActivity(a -> {
+            View widget = a.widgetHostViewAt(row);
+            long now = android.os.SystemClock.uptimeMillis();
+            widget.dispatchTouchEvent(android.view.MotionEvent.obtain(
+                    now, now, android.view.MotionEvent.ACTION_DOWN, 10, 10, 0));
+        });
+        org.robolectric.Shadows.shadowOf(Looper.getMainLooper())
+                .idleFor(700 + 100, java.util.concurrent.TimeUnit.MILLISECONDS);
+        dashboardScenario.onActivity(a -> {
+            View widget = a.widgetHostViewAt(row);
+            float height = widget.getHeight() * 2f;
+            long now = android.os.SystemClock.uptimeMillis();
+            widget.dispatchTouchEvent(android.view.MotionEvent.obtain(
+                    now, now, android.view.MotionEvent.ACTION_MOVE, 10, 10 + height, 0));
+            widget.dispatchTouchEvent(android.view.MotionEvent.obtain(
+                    now, now, android.view.MotionEvent.ACTION_UP, 10, 10 + height, 0));
+        });
+        idle();
+    }
+
+    /** Replaces the board's home-gesture wiring on a row's widget with a
+     * counting spy (tap-mode scenarios). */
+    public void spyHomeGestures(int row) {
+        homeGestureEvents.clear();
+        dashboardScenario.onActivity(a -> {
+            me.pompel.elauncher.widget.WidgetHostView widget = a.widgetHostViewAt(row);
+            widget.setHomeGestures(ev -> homeGestureEvents.add(ev.getActionMasked()));
+            widget.setOnHomeGestureCancel(() -> { });
+        });
+        idle();
+    }
+
+    public int homeGestureCount() {
+        return homeGestureEvents.size();
+    }
+
+    public String storedTaps(int position) {
+        List<Integer> ids = storedBoardIds();
+        me.pompel.elauncher.widget.WidgetTaps taps = widgetPrefs().widgets().isEmpty()
+                ? me.pompel.elauncher.widget.WidgetTaps.ON
+                : widgetPrefs().widgets().get(Math.min(position, widgetPrefs().widgets().size() - 1)).taps();
+        switch (taps) {
+            case DOUBLE_TAP: return "double";
+            case OFF: return "off";
+            default: return "on";
+        }
+    }
+
+    public void setWidgetTaps(int position, String mode) {
+        me.pompel.elauncher.widget.WidgetTaps taps = "off".equals(mode)
+                ? me.pompel.elauncher.widget.WidgetTaps.OFF
+                : "double".equals(mode)
+                        ? me.pompel.elauncher.widget.WidgetTaps.DOUBLE_TAP
+                        : me.pompel.elauncher.widget.WidgetTaps.ON;
+        dashboard().setWidgetTaps(position, taps);
+        idle();
+    }
+
     /** True when a MAIN/LAUNCHER entry with the given label is queryable, i.e. the
      * launcher lists it (Robolectric merges the real manifest). */
+    /** A full tap straight on the widget's own view: whatever tap mode the
+     * widget is in decides who sees it. */
     public void tapWidget() {
         dashboardScenario.onActivity(a -> {
-            // force a layout pass, then dispatch a full tap through the decor:
-            // it reaches the row's proxy overlay and is forwarded to the widget
-            androidx.recyclerview.widget.RecyclerView board =
-                    a.findViewById(me.pompel.elauncher.R.id.board);
-            View parent = (View) board.getParent();
-            int w = Math.max(1, parent.getWidth());
-            int h = Math.max(1, parent.getHeight());
-            board.measure(
-                    View.MeasureSpec.makeMeasureSpec(w, View.MeasureSpec.EXACTLY),
-                    View.MeasureSpec.makeMeasureSpec(h, View.MeasureSpec.EXACTLY));
-            board.layout(0, 0, w, h);
-            // aim at the first widget row's overlay (the current row bounds),
-            // not a fixed coordinate: row height/columns change with resize
-            View row0 = board.getChildAt(0);
-            if (row0 == null) throw new AssertionError("no row on the board");
-            float x = row0.getX() + row0.getWidth() / 2f;
-            float y = row0.getY() + row0.getHeight() / 2f;
-            View decor = a.getWindow().getDecorView();
+            View widget = a.widgetHostViewAt(0);
             long now = android.os.SystemClock.uptimeMillis();
-            decor.dispatchTouchEvent(android.view.MotionEvent.obtain(
-                    now, now, android.view.MotionEvent.ACTION_DOWN, x, y, 0));
-            decor.dispatchTouchEvent(android.view.MotionEvent.obtain(
-                    now, now, android.view.MotionEvent.ACTION_UP, x, y, 0));
+            widget.dispatchTouchEvent(android.view.MotionEvent.obtain(
+                    now, now, android.view.MotionEvent.ACTION_DOWN, 10, 10, 0));
+            widget.dispatchTouchEvent(android.view.MotionEvent.obtain(
+                    now, now, android.view.MotionEvent.ACTION_UP, 10, 10, 0));
         });
-        idle();
-    }
-
-    public void removeAt(int position) {
-        dashboardScenario.onActivity(a -> {
-            if (a.rowCount() == 0) throw new AssertionError("board is empty");
-            if (!a.isEditMode()) a.enterEditMode();
-        });
-        idle();
-        View handle = dashboard().boardRowAt(position).findViewWithTag(
-                me.pompel.elauncher.R.id.remove_handle);
-        if (handle == null) throw new AssertionError("no remove handle");
-        handle.performClick();
-        idle();
-    }
-
-    /** Hold on empty board space: dispatches DOWN directly on the board (the
-     * hold logic lives in its own onInterceptTouchEvent), waits past HOLD_MS,
-     * then releases: the adder popover must open. */
-    public void holdBoardEmptyOpenAdder() {
-        dashboardScenario.onActivity(a ->
-                a.onEmptySpaceLongPressed(5, 400)); // empty space below the row
         idle();
     }
 
@@ -1872,311 +1685,50 @@ public class LauncherWorld {
         return false;
     }
 
-    /** The AppWidgetHostView of the row at position: first child of the row
-     * container. A fresh instance after a released resize (view re-created). */
-    public View boardWidgetView(int position) {
-        View[] ref = new View[1];
-        dashboardScenario.onActivity(a -> {
-            android.view.ViewGroup row =
-                    (android.view.ViewGroup) dashboard().boardRowAt(position);
-            ref[0] = row.getChildAt(0);
-        });
-        return ref[0];
-    }
-
-    /** Pushes a RemoteViews layout containing a tall ScrollView into the
-     * fixture widget, exactly as a provider update would. */
-    public void pushScrollableWidgetContent(int position) {
-        dashboardScenario.onActivity(a -> {
-            android.appwidget.AppWidgetHostView host =
-                    (android.appwidget.AppWidgetHostView) boardWidgetView(position);
-            android.widget.RemoteViews rv = new android.widget.RemoteViews(
-                    appContext().getPackageName(),
-                    me.pompel.elauncher.R.layout.widget_scroll_fixture);
-            host.updateAppWidget(rv);
-        });
-        idle();
-    }
-
-    private static String describe(View v) {
-        StringBuilder sb = new StringBuilder(v.getClass().getSimpleName());
-        if (v instanceof android.view.ViewGroup) {
-            android.view.ViewGroup g = (android.view.ViewGroup) v;
-            for (int i = 0; i < g.getChildCount(); i++) {
-                sb.append(" > ").append(describe(g.getChildAt(i)));
-            }
-        }
-        return sb.toString();
-    }
-
-    /** Scrolls inside the widget view: a vertical swipe dispatched through
-     * the decor so the full touch pipeline (overlay, row, board) sees it. */
-    public void scrollInsideWidget(int position, int dyPx) {
-        dashboardScenario.onActivity(a -> {
-            androidx.recyclerview.widget.RecyclerView board =
-                    a.findViewById(me.pompel.elauncher.R.id.board);
-            View parent = (View) board.getParent();
-            int w = Math.max(1, parent.getWidth());
-            int h = Math.max(1, parent.getHeight());
-            board.measure(
-                    View.MeasureSpec.makeMeasureSpec(w, View.MeasureSpec.EXACTLY),
-                    View.MeasureSpec.makeMeasureSpec(h, View.MeasureSpec.EXACTLY));
-            board.layout(0, 0, w, h);
-            View widget = ((android.view.ViewGroup) dashboard().boardRowAt(position))
-                    .getChildAt(0);
-            widget = ((android.view.ViewGroup) widget).getChildAt(0); // row → widget
-            int[] wl = new int[2]; widget.getLocationOnScreen(wl);
-            View decor = a.getWindow().getDecorView();
-            int[] dl = new int[2]; decor.getLocationOnScreen(dl);
-            float x = wl[0] - dl[0] + widget.getWidth() / 2f;
-            float y0 = wl[1] - dl[1] + widget.getHeight() / 2f;
-            float y1 = y0 - dyPx;
-            long base = android.os.SystemClock.uptimeMillis();
-            decor.dispatchTouchEvent(android.view.MotionEvent.obtain(
-                    base, base, android.view.MotionEvent.ACTION_DOWN, x, y0, 0));
-            decor.dispatchTouchEvent(android.view.MotionEvent.obtain(
-                    base, base + 16, android.view.MotionEvent.ACTION_MOVE, x, (y0 + y1) / 2, 0));
-            decor.dispatchTouchEvent(android.view.MotionEvent.obtain(
-                    base, base + 32, android.view.MotionEvent.ACTION_MOVE, x, y1, 0));
-            decor.dispatchTouchEvent(android.view.MotionEvent.obtain(
-                    base, base + 48, android.view.MotionEvent.ACTION_UP, x, y1, 0));
-        });
-        idle();
-    }
-
-    /** Vertical scroll position of the widget's inner scrollable content. */
-    public int widgetInnerScrollTop(int position) {
-        int[] ref = new int[1];
-        dashboardScenario.onActivity(a -> {
-            View widget = boardWidgetView(position);
-            int[] top = {findScrollTop(widget)};
-            ref[0] = top[0];
-        });
-        return ref[0];
-    }
-
-    private static int findScrollTop(View v) {
-        if (v instanceof android.widget.ScrollView
-                || v instanceof android.widget.AbsListView) {
-            return ((android.view.View) v).getScrollY();
-        }
-        if (v instanceof android.view.ViewGroup) {
-            android.view.ViewGroup g = (android.view.ViewGroup) v;
-            for (int i = 0; i < g.getChildCount(); i++) {
-                int t = findScrollTop(g.getChildAt(i));
-                if (t > 0) return t;
-            }
-        }
-        return 0;
-    }
-
-    /** Drives the resize handle touch stream (DOWN, MOVE to the target height,
-     * UP): the same events the corner handle receives on a real drag. */
-    public void dragResizeHandleTo(int targetDp) {
-        dashboardScenario.onActivity(a -> {
-            android.view.ViewGroup row =
-                    (android.view.ViewGroup) dashboard().boardRowAt(0);
-            View handle = row.findViewWithTag(me.pompel.elauncher.R.id.resize_handle);
-            if (handle == null) throw new AssertionError("no resize handle: enter edit mode first");
-            int startDp = dashboard().rowHeightDp(0);
-            float density = a.getResources().getDisplayMetrics().density;
-            // force a layout pass so the handle reports real coordinates
-            androidx.recyclerview.widget.RecyclerView board =
-                    a.findViewById(me.pompel.elauncher.R.id.board);
-            View parent = (View) board.getParent();
-            int w = Math.max(1, parent.getWidth());
-            int h = Math.max(1, parent.getHeight());
-            board.measure(
-                    View.MeasureSpec.makeMeasureSpec(w, View.MeasureSpec.EXACTLY),
-                    View.MeasureSpec.makeMeasureSpec(h, View.MeasureSpec.EXACTLY));
-            board.layout(0, 0, w, h);
-            // drag through the DECOR like a real finger: the touch stream is
-            // routed by the view hierarchy, so whatever sits on top of the
-            // handle on the device intercepts it too (regression: the hold
-            // overlay swallowed resize drags in edit mode)
-            View decor = a.getWindow().getDecorView();
-            int[] hl = new int[2]; handle.getLocationOnScreen(hl);
-            int[] dl = new int[2]; decor.getLocationOnScreen(dl);
-            float x = hl[0] - dl[0] + handle.getWidth() / 2f;
-            float y0 = hl[1] - dl[1] + handle.getHeight() / 2f;
-            float dy = (targetDp - startDp) * density;
-            long base = android.os.SystemClock.uptimeMillis();
-            decor.dispatchTouchEvent(android.view.MotionEvent.obtain(
-                    base, base, android.view.MotionEvent.ACTION_DOWN, x, y0, 0));
-            decor.dispatchTouchEvent(android.view.MotionEvent.obtain(
-                    base, base + 16, android.view.MotionEvent.ACTION_MOVE, x, y0 + dy / 2, 0));
-            decor.dispatchTouchEvent(android.view.MotionEvent.obtain(
-                    base, base + 32, android.view.MotionEvent.ACTION_MOVE, x, y0 + dy, 0));
-            decor.dispatchTouchEvent(android.view.MotionEvent.obtain(
-                    base, base + 48, android.view.MotionEvent.ACTION_UP, x, y0 + dy, 0));
-        });
-        idle();
-    }
-
-    /** Hold on the empty board space BELOW the widgets, dispatched through
-     * the decor: the touch stream is routed by the view hierarchy, so only a
-     * live listener on the board itself can open the adder (regression: the
-     * RecyclerView item-touch listener never fired there). */
-    public void holdBoardEmptyBelowWidgets() {
-        dashboardScenario.onActivity(a -> {
-            androidx.recyclerview.widget.RecyclerView board =
-                    a.findViewById(me.pompel.elauncher.R.id.board);
-            View parent = (View) board.getParent();
-            int w = Math.max(1, parent.getWidth());
-            int h = Math.max(1, parent.getHeight());
-            board.measure(
-                    View.MeasureSpec.makeMeasureSpec(w, View.MeasureSpec.EXACTLY),
-                    View.MeasureSpec.makeMeasureSpec(h, View.MeasureSpec.EXACTLY));
-            board.layout(0, 0, w, h);
-            View row0 = board.getChildAt(0);
-            if (row0 == null) throw new AssertionError("no row on the board");
-            int y = Math.min(row0.getBottom() + 120, board.getHeight() - 20);
-            int[] bl = new int[2]; board.getLocationOnScreen(bl);
-            int[] dl = new int[2]; a.getWindow().getDecorView().getLocationOnScreen(dl);
-            float x = bl[0] - dl[0] + board.getWidth() / 2f;
-            float fy = bl[1] - dl[1] + y;
-            a.getWindow().getDecorView().dispatchTouchEvent(
-                    android.view.MotionEvent.obtain(
-                            android.os.SystemClock.uptimeMillis(),
-                            android.os.SystemClock.uptimeMillis(),
-                            android.view.MotionEvent.ACTION_DOWN, x, fy, 0));
-        });
-        org.robolectric.Shadows.shadowOf(Looper.getMainLooper())
-                .idleFor(800, java.util.concurrent.TimeUnit.MILLISECONDS);
-        dashboardScenario.onActivity(a -> {
-            androidx.recyclerview.widget.RecyclerView board =
-                    a.findViewById(me.pompel.elauncher.R.id.board);
-            int[] bl = new int[2]; board.getLocationOnScreen(bl);
-            int[] dl = new int[2]; a.getWindow().getDecorView().getLocationOnScreen(dl);
-            View row0 = board.getChildAt(0);
-            int y = Math.min(row0.getBottom() + 120, board.getHeight() - 20);
-            a.getWindow().getDecorView().dispatchTouchEvent(
-                    android.view.MotionEvent.obtain(
-                            android.os.SystemClock.uptimeMillis(),
-                            android.os.SystemClock.uptimeMillis(),
-                            android.view.MotionEvent.ACTION_UP,
-                            bl[0] - dl[0] + board.getWidth() / 2f, bl[1] - dl[1] + y, 0));
-        });
-        idle();
-    }
-
-    /** True when the edit-mode hint bar is visible on the board. The id is
-     * looked up by name so this helper compiles before the view ships. */
-    public boolean editHintVisible() {
-        boolean[] v = new boolean[1];
-        dashboardScenario.onActivity(a -> {
-            int id = a.getResources().getIdentifier(
-                    "edit_hint", "id", a.getPackageName());
-            View hint = id == 0 ? null : a.findViewById(id);
-            v[0] = hint != null && hint.getVisibility() == View.VISIBLE;
-        });
-        return v[0];
-    }
-
-    /** The text of the edit-mode hint bar. */
-    public String editHintText() {
-        String[] t = new String[1];
-        dashboardScenario.onActivity(a -> {
-            int id = a.getResources().getIdentifier(
-                    "edit_hint", "id", a.getPackageName());
-            View hint = id == 0 ? null : a.findViewById(id);
-            t[0] = hint == null ? "" : ((android.widget.TextView) hint).getText().toString();
-        });
-        return t[0];
-    }
-
-    /** True when the widget view of row 0 was built on the plain widget
-     * context (not the activity): RemoteViews reflection rejects classes
-     * substituted by the AppCompat view factory ("Couldn't add widget" on
-     * device), so rows must inflate through a factory-free context. */
-    public boolean widgetRowBuiltOnPlainContext() {
-        boolean[] ok = new boolean[1];
-        dashboardScenario.onActivity(a -> {
-            android.content.Context ctx = ((android.view.ViewGroup) dashboard()
-                    .boardRowAt(0)).getChildAt(0).getContext();
-            ok[0] = ctx != a && ctx instanceof android.content.ContextWrapper;
-        });
-        return ok[0];
-    }
-
-    /** The alpha channel of the adder preview frame's solid color, resolved
-     * through the activity theme: 0 = no solid backing panel. */
-    public int adderPreviewBackingAlpha() {
-        int[] c = new int[1]; c[0] = -2;
-        dashboardScenario.onActivity(a -> {
-            android.content.res.Resources res = a.getResources();
-            try {
-                org.xmlpull.v1.XmlPullParser p = res.getXml(
-                        me.pompel.elauncher.R.drawable.preview_frame);
-                while (p.next() != org.xmlpull.v1.XmlPullParser.END_DOCUMENT) {
-                    if ("solid".equals(p.getName())) break;
-                }
-                android.util.AttributeSet as = android.util.Xml.asAttributeSet(p);
-                android.content.res.TypedArray ta = a.getTheme().obtainStyledAttributes(
-                        as, new int[]{android.R.attr.color}, 0, 0);
-                c[0] = android.graphics.Color.alpha(ta.getColor(0, -1));
-                ta.recycle();
-            } catch (Exception e) {
-                throw new AssertionError("cannot read preview_frame solid color", e);
-            }
-        });
-        return c[0];
-    }
-
-    /** Drops the shadow manager's bound-widget record, as if the widget id
-     * were unbound while a resize drag is in flight. */
-    public void forgetWidgetBinding(int position) {
-        int id = storedBoardIds().get(position);
-        org.robolectric.shadows.ShadowAppWidgetManager shadow = shadowOf(widgetManager());
+    /** The eBoard activity must not be exported: reachable only through
+     * launcher gestures and explicit in-app intents (master's "make eBoard
+     * internal to the launcher" behavior). */
+    public boolean dashboardExported() {
+        android.content.ComponentName cn = new android.content.ComponentName(
+                appContext(), me.pompel.elauncher.DashboardActivity.class);
         try {
-            Field f = shadow.getClass().getDeclaredField("widgetInfos");
-            f.setAccessible(true);
-            ((java.util.Map<?, ?>) f.get(shadow)).remove(id);
-        } catch (ReflectiveOperationException e) {
+            return appContext().getPackageManager().getActivityInfo(cn, 0).exported;
+        } catch (android.content.pm.PackageManager.NameNotFoundException e) {
             throw new RuntimeException(e);
         }
     }
 
-    /** Installs a recording touch listener on the row's CURRENT widget view:
-     * later forwarded streams from the hold proxy must land on this fresh
-     * view, not on a stale detached instance. */
-    public void spyCurrentWidgetTouches() {
-        dashboardScenario.onActivity(a -> {
-            View widget = boardWidgetView(0);
-            widget.setOnTouchListener((v, ev) -> {
-                widgetTouchesSpied[0] = true;
-                return false;
-            });
-        });
+    /** Widget ids the board's host allocated in this scenario. */
+    public int hostAllocations() {
+        return me.pompel.elauncher.unit.ShadowConfigureHost.allocations();
+    }
+
+    /** Launches the app's own home activity, as the system HOME key does. */
+    public void callHomeLauncher() {
+        Intent home = new Intent(Intent.ACTION_MAIN)
+                .addCategory(Intent.CATEGORY_HOME)
+                .setPackage(appContext().getPackageName())
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        appContext().startActivity(home);
         idle();
     }
 
-    /** Whether the touch spy installed by spyCurrentWidgetTouches fired. */
-    public boolean widgetTouchSpied() {
-        return widgetTouchesSpied[0];
+    /** The home entry must declare singleTask: a home invocation then lands on
+     * the existing main view instance and clears whatever sits above it (the
+     * board, settings), instead of surfacing the board again. */
+    public boolean mainActivityIsSingleTask() {
+        android.content.pm.ActivityInfo info;
+        try {
+            info = appContext().getPackageManager().getActivityInfo(
+                    new android.content.ComponentName(appContext(),
+                            me.pompel.elauncher.MainActivity.class), 0);
+        } catch (android.content.pm.PackageManager.NameNotFoundException e) {
+            throw new AssertionError("main activity not found", e);
+        }
+        return info.launchMode == android.content.pm.ActivityInfo.LAUNCH_SINGLE_TASK;
     }
 
-    private final boolean[] widgetTouchesSpied = new boolean[1];
-
-    /** The widget view seen when the drag started (fresh-view comparison). */
-    private View initialWidgetViewRef;
-
-    public void noteInitialWidgetView() {
-        initialWidgetViewRef = boardWidgetView(0);
-    }
-
-    public View initialWidgetView() {
-        return initialWidgetViewRef;
-    }
-
-    /** Screen density of the dashboard activity. */
-    public float density() {
-        float[] d = new float[1];
-        dashboardScenario.onActivity(a -> d[0] = a.getResources().getDisplayMetrics().density);
-        return d[0];
-    }
-
-    /** Background color of the settings root view (0 when not a plain color). */
+    /** Root view background of the settings screen. */
     public int settingsRootBackgroundColor() {
         int[] color = new int[1];
         settingsScenario.onActivity(a -> {
@@ -2201,273 +1753,89 @@ public class LauncherWorld {
         return color[0];
     }
 
-    /** The eBoard dashboard must be internal: not exported, so no other app
-     * can start it, and without a MAIN/LAUNCHER filter, so no launcher lists it. */
-    public boolean dashboardExported() {
-        android.content.ComponentName cn = new android.content.ComponentName(
-                appContext(), me.pompel.elauncher.DashboardActivity.class);
-        try {
-            return appContext().getPackageManager().getActivityInfo(cn, 0).exported;
-        } catch (android.content.pm.PackageManager.NameNotFoundException e) {
-            throw new RuntimeException(e);
-        }
+    /** Widget configure launches that went through AppWidgetHost. */
+    public int hostConfigureRequests() {
+        return me.pompel.elauncher.unit.ShadowConfigureHost.configureRequests();
     }
 
-    // ---- Launcher3 picker replication helpers --------------------------------
-
-    /** Registers one more kind of the fixture provider (same package,
-     * different receiver) so it lands in the fixture app's adder section. */
-    public void addFixtureKind(String label, int minW, int minH) {
-        android.appwidget.AppWidgetProviderInfo info =
-                new android.appwidget.AppWidgetProviderInfo();
-        info.provider = new android.content.ComponentName(appContext().getPackageName(),
-                "me.fixtures.WidgetProvider$Kind" + label.hashCode());
-        info.label = label;
-        info.minWidth = minW;
-        info.minHeight = minH;
-        android.content.pm.ActivityInfo ai = new android.content.pm.ActivityInfo();
-        ai.packageName = appContext().getPackageName();
-        ai.nonLocalizedLabel = label;
-        try {
-            java.lang.reflect.Field f = android.appwidget.AppWidgetProviderInfo.class
-                    .getField("providerInfo");
-            f.set(info, ai);
-        } catch (Exception ignored) {
-        }
-        shadowOf(widgetManager()).addInstalledProvider(info);
+    /** Makes the fixture provider's kind require a configure activity. */
+    public void requireWidgetConfiguration() {
+        if (lastProviderInfo == null) throw new AssertionError("no fixture provider installed");
+        lastProviderInfo.configure = new android.content.ComponentName(
+                widgetProvider.getPackageName(), "me.fixtures.Configure");
+        // the framework resolves the configure component before starting it:
+        // register a stub activity so the request is observable
+        org.robolectric.Shadows.shadowOf(appContext().getPackageManager())
+                .addActivityIfNotPresent(lastProviderInfo.configure);
     }
 
-    /** Number of kind cards in the adder row that holds the kind with the
-     * given label (a wide kind alone = 1, two narrow kinds share a row = 2). */
-    public int adderKindRowSize(String label) {
-        int[] size = new int[] { -1 };
-        dashboardScenario.onActivity(a -> {
-            android.app.Dialog d = org.robolectric.shadows.ShadowDialog.getLatestDialog();
-            android.view.ViewGroup list = d.findViewById(me.pompel.elauncher.R.id.adder_list);
-            for (int i = 0; i < list.getChildCount(); i++) {
-                for (View cell : adderKindCells(list.getChildAt(i))) {
-                    TextView t = cell.findViewById(me.pompel.elauncher.R.id.kind_title);
-                    if (t != null && label.contentEquals(t.getText().toString())) {
-                        size[0] = ((android.view.ViewGroup) cell.getParent()).getChildCount();
-                        return;
-                    }
-                }
-            }
-        });
-        return size[0];
-    }
-
-    /** True when the two kinds live in the same adder row. */
-    public boolean adderKindsShareRow(String first, String second) {
-        boolean[] ok = new boolean[] { false };
-        dashboardScenario.onActivity(a -> {
-            android.app.Dialog d = org.robolectric.shadows.ShadowDialog.getLatestDialog();
-            android.view.ViewGroup list = d.findViewById(me.pompel.elauncher.R.id.adder_list);
-            android.view.ViewGroup rowFirst = null;
-            android.view.ViewGroup rowSecond = null;
-            for (int i = 0; i < list.getChildCount(); i++) {
-                for (View cell : adderKindCells(list.getChildAt(i))) {
-                    TextView t = cell.findViewById(me.pompel.elauncher.R.id.kind_title);
-                    if (t == null) continue;
-                    String text = t.getText().toString();
-                    if (first.contentEquals(text)) rowFirst = (android.view.ViewGroup) cell.getParent();
-                    if (second.contentEquals(text)) rowSecond = (android.view.ViewGroup) cell.getParent();
-                }
-            }
-            ok[0] = rowFirst != null && rowFirst == rowSecond;
-        });
-        return ok[0];
-    }
-
-    /** Titles of the app sections whose kind grid is visible (expanded). */
-    public java.util.List<String> adderExpandedSections() {
-        java.util.List<String> out = new java.util.ArrayList<>();
-        dashboardScenario.onActivity(a -> {
-            android.app.Dialog d = org.robolectric.shadows.ShadowDialog.getLatestDialog();
-            android.view.ViewGroup list = d.findViewById(me.pompel.elauncher.R.id.adder_list);
-            for (int i = 0; i < list.getChildCount(); i++) {
-                android.view.ViewGroup section = (android.view.ViewGroup) list.getChildAt(i);
-                TextView t = section.findViewById(titleId());
-                View grid = section.findViewById(me.pompel.elauncher.R.id.adder_grid);
-                if (t != null && grid != null && grid.getVisibility() == View.VISIBLE
-                        && ((android.view.ViewGroup) grid).getChildCount() > 0) {
-                    out.add(t.getText().toString());
-                }
-            }
-        });
-        return out;
-    }
-
-    /** App label of the first adder section. */
-    public String adderFirstSectionTitle() {
-        String[] out = new String[] { "" };
-        dashboardScenario.onActivity(a -> {
-            android.app.Dialog d = org.robolectric.shadows.ShadowDialog.getLatestDialog();
-            android.view.ViewGroup list = d.findViewById(me.pompel.elauncher.R.id.adder_list);
-            for (int i = 0; i < list.getChildCount(); i++) {
-                android.view.ViewGroup section = (android.view.ViewGroup) list.getChildAt(i);
-                TextView t = section.findViewById(titleId());
-                if (t != null) {
-                    out[0] = t.getText().toString();
-                    return;
-                }
-            }
-        });
-        return out[0];
-    }
-
-    /** Taps the header row of the app section with the given label. */
-    public void tapAdderHeader(String label) {
-        dashboardScenario.onActivity(a -> {
-            android.app.Dialog d = org.robolectric.shadows.ShadowDialog.getLatestDialog();
-            android.view.ViewGroup list = d.findViewById(me.pompel.elauncher.R.id.adder_list);
-            for (int i = 0; i < list.getChildCount(); i++) {
-                android.view.ViewGroup section = (android.view.ViewGroup) list.getChildAt(i);
-                TextView t = section.findViewById(titleId());
-                if (t != null && label.contentEquals(t.getText().toString())) {
-                    section.getChildAt(0).performClick();
-                    return;
-                }
-            }
-            throw new AssertionError("no adder header " + label);
-        });
-        idle();
-    }
-
-    /** True when every adder section header carries a non-empty app icon. */
-    public boolean adderHeadersHaveIcons() {
-        boolean[] ok = new boolean[] { true };
-        dashboardScenario.onActivity(a -> {
-            android.app.Dialog d = org.robolectric.shadows.ShadowDialog.getLatestDialog();
-            android.view.ViewGroup list = d.findViewById(me.pompel.elauncher.R.id.adder_list);
-            int sections = 0;
-            for (int i = 0; i < list.getChildCount(); i++) {
-                android.view.ViewGroup section = (android.view.ViewGroup) list.getChildAt(i);
-                TextView t = section.findViewById(titleId());
-                if (t == null) continue;
-                sections++;
-                android.widget.ImageView icon = section.findViewById(iconId());
-                if (icon == null || icon.getDrawable() == null) ok[0] = false;
-            }
-            if (sections == 0) ok[0] = false;
-        });
-        return ok[0];
-    }
-
-    /** True when the widget at the given board position was bound with the
-     * advised size options (AppWidgetManager.OPTION_APPWIDGET_MIN_*). */
-    public boolean boundWidgetOptions(int position, int w, int h) {
-        boolean[] ok = new boolean[] { false };
-        dashboardScenario.onActivity(a -> {
-            int id = storedBoardIds().get(position);
-            android.os.Bundle o = widgetManager().getAppWidgetOptions(id);
-            // the host view re-derives the final options from the laid-out
-            // advised size, subtracting the system widget padding (16px at
-            // density 1 in the Robolectric environment)
-            ok[0] = o.getInt(android.appwidget.AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH) == w - 16
-                    && o.getInt(android.appwidget.AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT) == h - 16;
-        });
-        return ok[0];
-    }
-
-    /** The reconfigure gear view id (0 before the fix ships: red runs
-     * must not fail to compile). */
-    private static int gearId(android.app.Activity a) {
-        return a.getResources().getIdentifier(
-                "reconfigure_handle", "id", a.getPackageName());
-    }
-
-    /** True when the placed widget shows its reconfigure gear. */
-    public boolean reconfigureHandleVisible(int position) {
-        boolean[] ref = new boolean[1];
-        dashboardScenario.onActivity(a -> {
-            // the fixture host may allocate id 0; findViewWithTag(0)
-            // would then match the row itself (the row tag is the id)
-            int gid = gearId(a);
-            View gear = gid == 0 ? null
-                    : dashboard().boardRowAt(position).findViewWithTag(gid);
-            ref[0] = gear != null && gear.getVisibility() == View.VISIBLE;
-        });
-        return ref[0];
-    }
-
-    /** Taps the reconfigure gear on the first row. */
-    public void tapReconfigureHandle() {
-        dashboardScenario.onActivity(a -> {
-            int gid = gearId(a);
-            View gear = gid == 0 ? null
-                    : dashboard().boardRowAt(0).findViewWithTag(gid);
-            if (gear == null) throw new AssertionError("no reconfigure handle");
-            gear.performClick();
-        });
-        idle();
-    }
-
-    /** The host was asked to configure the PLACED widget: a configure
-     * request whose id matches the stored binding (reconfigure must
-     * never touch a fresh id). */
-    public void reconfigureRequestedForPlacedWidget() {
-        int expected = storedBoardIds().get(0);
+    /** Asserts the board started the widget configure flow and remembers
+     * the pending request for deliverConfigureResult(). */
+    public void configureRequested() {
         final org.robolectric.shadows.ShadowActivity.IntentForResult[] rec =
                 new org.robolectric.shadows.ShadowActivity.IntentForResult[1];
         dashboardScenario.onActivity(a ->
                 rec[0] = org.robolectric.Shadows.shadowOf(a)
                         .getNextStartedActivityForResult());
         if (rec[0] == null) {
-            throw new AssertionError("no reconfigure request was started");
+            throw new AssertionError("no activity result request was started");
         }
         if (!android.appwidget.AppWidgetManager.ACTION_APPWIDGET_CONFIGURE
                 .equals(rec[0].intent.getAction())) {
             throw new AssertionError("expected the widget configure intent, got "
                     + rec[0].intent.getAction());
         }
-        int id = rec[0].intent.getIntExtra(
-                android.appwidget.AppWidgetManager.EXTRA_APPWIDGET_ID, -1);
-        if (id != expected) {
-            throw new AssertionError("expected the placed widget id "
-                    + expected + ", got " + id);
+        if (!rec[0].intent.hasExtra(
+                android.appwidget.AppWidgetManager.EXTRA_APPWIDGET_ID)) {
+            throw new AssertionError("configure intent must carry the app widget id");
         }
         lastConfigureIntent = rec[0].intent;
     }
 
-    /** The preview of every kind card spans its cell (Launcher3's
-     * WidgetCell: the preview container fills the cell, not a fixed
-     * 128dp box). */
-    public void adderPreviewsFillCells() {
+    /** Delivers the configure activity's result for the pending request. */
+    public void deliverConfigureResult(boolean ok) {
         dashboardScenario.onActivity(a -> {
-            LinearLayout list = org.robolectric.shadows.ShadowDialog
-                    .getLatestDialog().findViewById(me.pompel.elauncher.R.id.adder_list);
-            int failures = 0;
-            for (View card : adderKindCells(list)) {
-                android.view.ViewGroup cell = (android.view.ViewGroup) card;
-                View preview = cell.getChildAt(0);
-                // the fix is the MATCH_PARENT contract (a laid-out-width
-                // comparison is layout-pass dependent in Robolectric:
-                // the table stretches cells after the first measure)
-                if (preview.getLayoutParams().width
-                        != android.view.ViewGroup.LayoutParams.MATCH_PARENT) {
-                    throw new AssertionError("the adder preview must fill its cell");
+            org.robolectric.shadows.ShadowActivity shadow =
+                    org.robolectric.Shadows.shadowOf(a);
+            android.content.Intent pending = lastConfigureIntent;
+            if (pending == null) {
+                // scenarios that do not assert the request first: the pending
+                // configure request is still in the activity's queue
+                org.robolectric.shadows.ShadowActivity.IntentForResult ir =
+                        shadow.getNextStartedActivityForResult();
+                if (ir == null || !android.appwidget.AppWidgetManager.ACTION_APPWIDGET_CONFIGURE
+                        .equals(ir.intent.getAction())) {
+                    throw new AssertionError("the widget configure flow was not started");
                 }
+                pending = ir.intent;
             }
-            if (failures > 0) throw new AssertionError(
-                    failures + " adder previews do not fill their cells");
+            int id = pending.getIntExtra(
+                    android.appwidget.AppWidgetManager.EXTRA_APPWIDGET_ID, -1);
+            android.content.Intent data = null;
+            if (ok) {
+                data = new android.content.Intent();
+                data.putExtra(android.appwidget.AppWidgetManager.EXTRA_APPWIDGET_ID, id);
+            }
+            shadow.receiveResult(pending,
+                    ok ? android.app.Activity.RESULT_OK
+                            : android.app.Activity.RESULT_CANCELED,
+                    data);
         });
+        idle();
     }
 
-    /** The kind descriptions wrap to three lines (Launcher3 caps the
-     * widget description at three lines). */
-    public void adderDescriptionsWrapToThreeLines() {
+    /** The widget host view of the row at position must carry no system
+     * white rounded container background (transparent board aesthetic). */
+    public boolean widgetTransparentBackground(int position) {
+        boolean[] transparent = new boolean[1];
         dashboardScenario.onActivity(a -> {
-            LinearLayout list = org.robolectric.shadows.ShadowDialog
-                    .getLatestDialog().findViewById(me.pompel.elauncher.R.id.adder_list);
-            int subId = a.getResources().getIdentifier("kind_sub", "id",
-                    a.getPackageName());
-            for (View card : adderKindCells(list)) {
-                TextView sub = ((android.view.ViewGroup) card).findViewById(subId);
-                if (sub == null || sub.getMaxLines() != 3) {
-                    throw new AssertionError("the kind description must wrap to three lines");
-                }
-            }
+            View row = a.boardRowAt(position);
+            View widget = ((android.view.ViewGroup) row).getChildAt(0);
+            android.graphics.drawable.Drawable bg = widget.getBackground();
+            transparent[0] = bg == null
+                    || (bg instanceof android.graphics.drawable.ColorDrawable
+                        && ((android.graphics.drawable.ColorDrawable) bg).getColor() == 0);
         });
+        return transparent[0];
     }
 }

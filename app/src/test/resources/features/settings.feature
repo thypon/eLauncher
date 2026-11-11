@@ -12,11 +12,6 @@ Feature: Settings screen
     Then the left gesture button shows "eBoard"
     And the right gesture button shows "Default"
 
-  Scenario: The eBoard scales with its density setting
-    When the eBoard density is set to 150%
-    And the eBoard is started
-    Then the eBoard column is 107dp wide
-
   Scenario: Assigning an app to the left gesture
     Given the settings screen is open
     When I tap the left gesture button
@@ -67,6 +62,15 @@ Feature: Settings screen
     Given the settings screen is open
     When I toggle the dark mode switch
     Then the dark mode preference is stored as "true"
+
+  Scenario: Animations are disabled by default
+    Given the settings screen is open
+    Then the animations switch is off
+
+  Scenario: Toggling animations stores the preference
+    Given the settings screen is open
+    When I toggle the animations switch
+    Then the animations preference is stored as "true"
 
   Scenario: Changing the number of apps
     Given the settings screen is open

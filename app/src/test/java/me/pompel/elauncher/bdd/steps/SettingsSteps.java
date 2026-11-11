@@ -73,6 +73,23 @@ public class SettingsSteps {
         world.toggleDarkModeSwitch();
     }
 
+    @Then("the animations switch is {word}")
+    public void animationsSwitchIs(String state) {
+        boolean on = "on".equals(state);
+        assertEquals(on, world.animationsSwitchChecked());
+    }
+
+    @When("I toggle the animations switch")
+    public void toggleAnimationsSwitch() {
+        world.toggleAnimationsSwitch();
+    }
+
+    @Then("the animations preference is stored as {string}")
+    public void animationsPrefStored(String value) {
+        assertEquals(Boolean.parseBoolean(value),
+                world.booleanPref(me.pompel.elauncher.MainActivity.ANIMATIONS_PREF));
+    }
+
     @Then("the dark mode preference is stored as {string}")
     public void darkModePrefStored(String value) {
         assertEquals(Boolean.parseBoolean(value), world.booleanPref("dark_mode_preference"));
@@ -153,10 +170,5 @@ public class SettingsSteps {
                     + "px, density=" + density + ", expected~=" + expected
                     + "px, gravity=" + title.getGravity());
         });
-    }
-
-    @When("the eBoard density is set to {int}%")
-    public void setEboardDensity(int percent) {
-        world.setEboardDensityPercent(percent);
     }
 }

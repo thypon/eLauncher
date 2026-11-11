@@ -31,6 +31,8 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.robolectric.Shadows.shadowOf;
 
+import me.pompel.elauncher.widget.WidgetPrefs;
+
 /**
  * Seeded fuzz over the new eBoard interactions: random operation sequences
  * (add, remove, reorder, resize, edit-mode toggles, restarts) with invariant
@@ -53,6 +55,8 @@ public class DashboardBoardFuzzTest {
         AppWidgetProviderInfo info = new AppWidgetProviderInfo();
         info.provider = provider;
         info.label = "Widget";
+        // a realistic clock-widget minimum: the board's default row height
+        info.minHeight = Math.round(200 * ctx.getResources().getDisplayMetrics().density);
         android.content.pm.ActivityInfo ai = new android.content.pm.ActivityInfo();
         ai.packageName = ctx.getPackageName();
         ai.nonLocalizedLabel = "Widget";
@@ -87,36 +91,42 @@ public class DashboardBoardFuzzTest {
     }
 
     private List<Integer> storedIds() {
-        return new BoardStore(ApplicationProvider.<Context>getApplicationContext()
-                .getSharedPreferences(BoardStore.PREFS_FILE, Context.MODE_PRIVATE)).ids();
+        return new WidgetPrefs(ApplicationProvider.<Context>getApplicationContext()
+                .getSharedPreferences(WidgetPrefs.PREFS_FILE, Context.MODE_PRIVATE)).ids();
     }
 
-    /** UI path: add button (empty board only) then first kind card in the
-     * popover (the adder is sectioned: the first child of the list is an
-     * app section header, the kinds live in its grid). */
+    /** UI path: add button (empty board only) then first kind row in the
+     * popover (the adder lists one row per provider kind). */
     private void addWidget() {
         activity().findViewById(R.id.add_widget).performClick();
         Dialog dialog = ShadowDialog.getLatestDialog();
         if (dialog == null) throw new AssertionError("adder popover did not open");
-        android.widget.TableLayout grid = (android.widget.TableLayout) dialog
-                .getWindow().getDecorView().findViewById(R.id.adder_grid);
-        if (grid == null || grid.getChildCount() == 0)
+        android.view.ViewGroup list = (android.view.ViewGroup) dialog
+                .getWindow().getDecorView().findViewById(R.id.adder_list);
+        if (list == null || list.getChildCount() == 0)
             throw new AssertionError("no kinds in popover");
-        android.view.ViewGroup firstRow = (android.view.ViewGroup) grid.getChildAt(0);
-        firstRow.getChildAt(0).performClick();
+        list.getChildAt(0).performClick();
         idle();
     }
 
     private void removeAt(int position) {
         if (!activity().isEditMode()) activity().enterEditMode();
-        View handle = activity().boardRowAt(position).findViewWithTag(R.id.remove_handle);
+        View row = activity().boardRowAt(position);
+        View handle = row.findViewWithTag(R.id.remove_handle);
+        if (handle == null && row.getParent() instanceof android.view.ViewGroup) {
+            handle = ((android.view.ViewGroup) row.getParent()).findViewWithTag(R.id.remove_handle);
+        }
         if (handle == null) throw new AssertionError("no remove handle");
         handle.performClick();
         idle();
     }
 
     private boolean handleVisible(int position) {
-        View handle = activity().boardRowAt(position).findViewWithTag(R.id.remove_handle);
+        View row = activity().boardRowAt(position);
+        View handle = row.findViewWithTag(R.id.remove_handle);
+        if (handle == null && row.getParent() instanceof android.view.ViewGroup) {
+            handle = ((android.view.ViewGroup) row.getParent()).findViewWithTag(R.id.remove_handle);
+        }
         return handle != null && handle.getVisibility() == View.VISIBLE;
     }
 
@@ -238,6 +248,6 @@ public class DashboardBoardFuzzTest {
         assertEquals(300, activity().rowHeightDp(0));
         removeAt(0);
         addWidget();
-        assertEquals(BoardStore.DEFAULT_SIZE_DP, activity().rowHeightDp(0));
+        assertEquals(WidgetPrefs.DEFAULT_HEIGHT_DP, activity().rowHeightDp(0));
     }
 }

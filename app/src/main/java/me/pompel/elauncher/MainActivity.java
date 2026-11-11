@@ -120,7 +120,7 @@ public class MainActivity extends AppCompatActivity {
     private void changeLayout(boolean home, boolean animated) {
         if (!home) loadApps();
         keyboardAction(home);
-        if (animated) {
+        if (animated && animationsEnabled()) {
             Transition transition = new Fade();
             transition.setDuration(300);
             transition.addTarget(R.id.HomeScreen);
@@ -175,13 +175,15 @@ public class MainActivity extends AppCompatActivity {
         swipeEnterDirection = 0;
         if (intent == null) return;
         try {
-            if (anims != null) {
+            startActivity(intent);
+            if (!animationsEnabled()) {
+                // animations disabled: cancel even the system's default window
+                // animation, so e-ink displays get an instant switch
+                overridePendingTransition(0, 0);
+            } else if (anims != null) {
                 // Directional swipe launch: the launched app slides in from the
                 // side the gesture came from, instead of the system's default.
-                startActivity(intent);
                 overridePendingTransition(anims[0], anims[1]);
-            } else {
-                startActivity(intent);
             }
         } catch (RuntimeException e) {
             // no handler for this intent (e.g. browser picker with no browser
@@ -198,6 +200,20 @@ public class MainActivity extends AppCompatActivity {
             case 1:  return new int[]{ R.anim.slide_in_right, R.anim.slide_out_left };
             default: return null;
         }
+    }
+
+    /** Preference key of the global animation toggle. Off by default: e-ink
+     * displays ghost on every animated redraw. */
+    public static final String ANIMATIONS_PREF = "animations_preference";
+
+    /** Whether window/transition animations are enabled for the given prefs;
+     * the setting defaults to off (e-ink). */
+    public static boolean animationsEnabled(SharedPreferences prefs) {
+        return prefs.getBoolean(ANIMATIONS_PREF, false);
+    }
+
+    private boolean animationsEnabled() {
+        return animationsEnabled(prefs);
     }
 
     // check if you have USAGE_STATS permission
