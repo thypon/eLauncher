@@ -780,10 +780,11 @@ public class DashboardActivity extends AppCompatActivity {
         if (widgets.bindAppWidgetIdIfAllowed(id, info.provider)) {
             finishAdd(id, info);
         } else {
-            host.deleteAppWidgetId(id);
-            int fallback = host.allocateAppWidgetId();
+            // reuse the RESERVED id in the bind request: the bind confirmation
+            // then applies to exactly the id the board already holds, instead
+            // of dropping it and allocating a second one (Launcher3's flow)
             Intent bind = new Intent(AppWidgetManager.ACTION_APPWIDGET_BIND);
-            bind.putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, fallback);
+            bind.putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, id);
             bind.putExtra(AppWidgetManager.EXTRA_APPWIDGET_PROVIDER, info.provider);
             startActivityForResult(bind, REQUEST_BIND);
             closeAdder(); // otherwise the popover scrim hides the system dialog
@@ -809,10 +810,10 @@ public class DashboardActivity extends AppCompatActivity {
     /** Launches a widget's configure activity for an already-bound id. */
     private void startConfigure(int id, AppWidgetProviderInfo info) {
         if (info.configure == null) return;
-        Intent configure = new Intent();
-        configure.setComponent(info.configure);
-        configure.putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, id);
-        startActivityForResult(configure, REQUEST_CONFIGURE);
+        // the host path: the framework asks the appwidget service for the
+        // configure PendingIntent and starts it (Robolectric shadows emulate
+        // the same observable launch)
+        host.startAppWidgetConfigureActivityForResult(this, id, 0, REQUEST_CONFIGURE, null);
     }
 
     public void closeAdder() {

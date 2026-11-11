@@ -145,6 +145,78 @@ public class DashboardSteps {
                 world.widgetTransparentBackground(0));
     }
 
+    @Then("the host allocated one widget id")
+    public void hostAllocatedOneId() {
+        assertEquals(1, world.hostAllocations());
+    }
+
+    @Given("the widget kind requires configuration")
+    public void widgetKindRequiresConfiguration() {
+        world.requireWidgetConfiguration();
+    }
+
+    @Then("the widget configuration is requested")
+    public void widgetConfigurationRequested() {
+        world.configureRequested();
+    }
+
+    @When("the configuration succeeds")
+    public void configurationSucceeds() {
+        world.deliverConfigureResult(true);
+    }
+
+    @When("the configuration is cancelled")
+    public void configurationCancelled() {
+        world.deliverConfigureResult(false);
+    }
+
+    @Then("the configuration is requested through the widget host")
+    public void configurationThroughHost() {
+        assertEquals(1, world.hostConfigureRequests());
+    }
+
+    @When("I hold the empty board space")
+    public void holdEmptyBoardSpace() {
+        // shrinks the last row to its minimum and holds on the space below:
+        // the hold timer lives in the board touch listener, so the hold must
+        // land on the ScrollView itself, not on a row
+        world.holdBoardEmptyBelowWidgets();
+    }
+
+    @When("I hold the empty board space below the widgets")
+    public void holdEmptyBoardSpaceBelowWidgets() {
+        world.holdBoardEmptyBelowWidgets();
+    }
+
+    @Then("the widget adder popover opens again")
+    public void widgetAdderPopoverOpensAgain() {
+        assertTrue("expected the widget adder popover to open again",
+                world.adderOpen());
+    }
+
+    @When("I remove the only widget row")
+    public void removeOnlyWidgetRow() {
+        world.longPressBoardRow(0);
+        world.rowChildPerformClick(0, me.pompel.elauncher.R.id.remove_handle);
+    }
+
+    @Then("the widget row is built on a plain widget context")
+    public void widgetRowPlainContext() {
+        assertTrue("widget rows must be built on the plain widget context",
+                world.widgetRowBuiltOnPlainContext());
+    }
+
+    @When("I watch the widget touches")
+    public void watchWidgetTouches() {
+        world.spyCurrentWidgetTouches();
+    }
+
+    @Then("the widget received the tap")
+    public void widgetReceivedTap() {
+        assertTrue("taps must reach the CURRENT widget host view",
+                world.widgetTouchSpied());
+    }
+
     @When("I add a widget from the widget adder")
     public void addWidgetFromAdder() {
         tapAddWidget();

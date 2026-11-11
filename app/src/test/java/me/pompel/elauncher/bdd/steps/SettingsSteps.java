@@ -154,9 +154,4 @@ public class SettingsSteps {
                     + "px, gravity=" + title.getGravity());
         });
     }
-
-    @When("the eBoard density is set to {int}%")
-    public void setEboardDensity(int percent) {
-        world.setEboardDensityPercent(percent);
-    }
 }

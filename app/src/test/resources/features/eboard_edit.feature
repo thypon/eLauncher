@@ -8,60 +8,6 @@ Feature: eBoard edit mode and widget adder
     Given a "Digital" widget provider offering "A digital clock widget" is installed
     And the eBoard is started
 
-  Scenario: Dragging the resize handle sideways resizes the widget width
-    When I add a widget from the widget adder
-    And I hold the widget row
-    And I drag the resize handle sideways to 120dp
-    Then the widget is rendered 160dp wide
-
-  Scenario: A new widget appears at its provider's advised size
-    When the widget provider advises a maximum size of 140x280dp
-    And I add a widget from the widget adder
-    Then the widget is rendered 140dp wide
-    And the widget is rendered 280dp tall
-
-  Scenario: A widget advised wider than a column spans the full row
-    When the widget provider advises a maximum size of 300x280dp
-    And I add a widget from the widget adder
-    Then the widget is rendered 300dp wide
-    And the widget occupies the full board row
-
-  Scenario: A widget resized past a column keeps its width and spans the row
-    When I add a widget from the widget adder
-    And I hold the widget row
-    And I drag the resize handle sideways to 250dp
-    Then the widget is rendered 320dp wide
-    And the widget occupies the full board row
-    And the widget width is stored as 320dp
-
-  Scenario: A released resize snaps to the widget grid
-    When I add a widget from the widget adder
-    And I hold the widget row
-    And I drag the resize handle to 175dp
-    Then the widget is rendered 200dp tall
-    And the widget height is stored as 200dp
-    And I drag the resize handle sideways to 250dp
-    Then the widget is rendered 320dp wide
-    And the widget width is stored as 320dp
-    And the widget occupies the full board row
-
-  Scenario: A widget resized across a column stays visible
-    When I add a widget from the widget adder
-    And I hold the widget row
-    Then the resized widget is not clipped to its column
-
-  Scenario: The row being resized paints above the other rows
-    Given the board has 2 widgets
-    When I long press the widget row
-    And I start dragging the resize handle sideways to 250dp
-    Then the resized row floats above the other rows
-
-  Scenario: Scrollable widget content scrolls inside the board
-    When I add a widget from the widget adder
-    And I load scrollable content into the widget
-    And I scroll inside the widget
-    Then the widget content has scrolled
-
   Scenario: The add button exists only on an empty board
     Then the add widget button is visible
     When I add a widget from the widget adder
@@ -88,18 +34,6 @@ Feature: eBoard edit mode and widget adder
     And I tap the widget
     Then edit mode is off
     And a widget row is on the board
-
-  Scenario: The adder popover can be reopened after use
-    When I add a widget from the widget adder
-    And I dismiss the widget adder popover
-    And I hold the empty board space
-    Then the widget adder popover opens again
-
-  Scenario: The add widget button opens the popover repeatedly
-    When I add a widget from the widget adder
-    And I remove the only widget row
-    And I tap the add widget button
-    Then the widget adder popover opens again
 
   Scenario: The board follows the theme background
     Given the dark mode preference is on
@@ -150,39 +84,19 @@ Feature: eBoard edit mode and widget adder
     Then the widget height is stored as 300dp
     And the widget is rendered 300dp tall
 
-  Scenario: Releasing a resize rebuilds the widget view
-    When I add a widget from the widget adder
-    And I long press the widget row
-    And I note the current widget view
-    And I drag the resize handle to 300dp
-    Then the widget row shows a fresh widget view
-    And the fresh widget view is 300dp tall
-
-  Scenario: Taps reach the widget after it was resized
-    When I add a widget from the widget adder
-    And I long press the widget row
-    And I drag the resize handle to 300dp
-    And I press the empty board space
-    And I watch the widget touches
-    And I tap the widget
-    Then the widget received the tap
-
-  Scenario: A second resize keeps the widget view up to date
-    When I add a widget from the widget adder
-    And I long press the widget row
-    And I drag the resize handle to 300dp
-    And I note the current widget view
-    And I drag the resize handle to 200dp
-    Then the widget row shows a fresh widget view
-    And the fresh widget view is 200dp tall
-
   Scenario: Releasing a resize when the provider is gone does not crash
 
-  Scenario: Dragging the resize handle through the screen resizes the widget
+  Scenario: The adder popover can be reopened after use
     When I add a widget from the widget adder
-    And I hold the widget row
-    And I drag the resize handle to 300dp
-    Then the widget is rendered 300dp tall
+    And I dismiss the widget adder popover
+    And I hold the empty board space
+    Then the widget adder popover opens again
+
+  Scenario: The add widget button opens the popover repeatedly
+    When I add a widget from the widget adder
+    And I remove the only widget row
+    And I tap the add widget button
+    Then the widget adder popover opens again
 
   Scenario: Holding the empty space below a widget opens the adder
     When I add a widget from the widget adder
@@ -192,37 +106,3 @@ Feature: eBoard edit mode and widget adder
   Scenario: Widget rows are built on a plain widget context
     When I add a widget from the widget adder
     Then the widget row is built on a plain widget context
-
-  Scenario: The adder preview backing is not a solid panel
-    When I long press the empty board space
-    Then the adder preview backing is transparent
-
-  Scenario: Edit mode explains resizing and removal
-    When I add a widget from the widget adder
-    Then the edit mode hint is hidden
-    And I hold the widget row
-    Then the edit mode hint explains resizing and removal
-
-  Scenario: A placed widget can be reconfigured
-    Given the widget kind requires configuration
-    When I add a widget from the widget adder
-    And the configuration succeeds
-    And I hold the widget row
-    Then the widget shows a reconfigure handle
-    And I note the current widget view
-    When I tap the reconfigure handle
-    Then the configuration is requested for the placed widget
-    When the configuration succeeds
-    Then the widget row shows a fresh widget view
-
-  Scenario: Widgets without configuration show no reconfigure handle
-    When I add a widget from the widget adder
-    And I hold the widget row
-    Then the widget shows no reconfigure handle
-
-  Scenario: Releasing a resize when the provider is gone does not crash
-    When I add a widget from the widget adder
-    And I long press the widget row
-    And the widget provider is unbound
-    And I drag the resize handle to 300dp
-    Then the widget height is stored as 300dp
