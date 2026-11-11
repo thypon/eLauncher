@@ -20,7 +20,7 @@ eLauncher favours easy readibility on eInk/ePaper devices, such as the Onyx Boox
 - Type to search in app drawer, if only one result is left, it is automatically launched (like OLauncher)
 - Gestures: swipe down for notification center, left/right swipe to launch any app (configurable in Settings), double tap to open the original launcher
 - Customizable swipe gestures: pick any app — or the built-in eBoard dashboard — for the left and right swipe via Settings
-- eBoard: a macOS-Snow-Leopard-style dashboard of persistent widgets, opened by the default left swipe (internal to the launcher: it has no launcher entry of its own and is not listed in the app drawer or search)
+- eBoard: a macOS-Snow-Leopard-style dashboard of persistent widgets, opened by the default left swipe (internal to the launcher: it has no launcher entry of its own and is not listed in the app drawer or search). The widget board is a single-column stack ported from Olauncher: per-widget tap modes (on / double tap / off), long-press editing with drag-to-reorder and vertical resize; hold on empty space for the widget adder
 - Hold on empty space to change the number of apps on homescreen
 
 ## apk size differences with OLauncher Light
@@ -56,3 +56,7 @@ Behavior specs live in Gherkin features (`app/src/test/resources/features/`) and
 - Step definitions are in `app/src/test/java/me/pompel/elauncher/bdd/steps/`.
 - `check` fails the build when line coverage of the app source drops below **80%** (`jacocoTestCoverageVerification`).
 - CI (`.github/workflows/ci.yml`) enforces the gate on every push and pull request.
+
+## Attribution
+
+The eBoard widget system (the single-column stack, the per-widget tap modes, the touch dispatcher and the resize frame) is ported from [Olauncher](https://github.com/tanujnotes/Olauncher) (GPL-3.0, © tanujnotes and Olauncher contributors), adapted for eInk: no crossfade animation and vertical-only resizing.
