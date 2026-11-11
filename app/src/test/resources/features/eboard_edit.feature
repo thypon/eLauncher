@@ -86,7 +86,7 @@ Feature: eBoard edit mode and widget adder
 
   Scenario: Widgets are separated by a margin
     Given the board has 2 widgets
-    Then the board has a 4 pixel margin between widgets
+    Then the board has a 1.5dp margin between widgets
 
   Scenario: The adder popover can be reopened after use
     When I add a widget from the widget adder

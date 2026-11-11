@@ -404,8 +404,8 @@ public class DashboardSteps {
         assertEquals(dp, world.renderedRowHeightDp(0));
     }
 
-    @Then("the board has a {int} pixel margin between widgets")
-    public void boardHasPixelMarginBetweenWidgets(int px) {
-        assertEquals(px, world.stackGapPx());
+    @Then("the board has a {float}dp margin between widgets")
+    public void boardHasPixelMarginBetweenWidgets(float dp) {
+        assertEquals(Math.round(dp * world.density()), world.stackGapPx());
     }
 }

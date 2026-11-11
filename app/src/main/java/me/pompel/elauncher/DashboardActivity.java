@@ -127,13 +127,14 @@ public class DashboardActivity extends AppCompatActivity {
         findViewById(android.R.id.content).post(this::applySystemGestureExclusion);
         board = findViewById(R.id.board);
         boardStack = findViewById(R.id.board_stack);
-        // a 4px gap between stack children (widgets, and between the edit
+        // a 1.5dp gap between stack children (widgets, and between the edit
         // bar and its widget): the divider is a fixed-size transparent
         // drawable, so it tracks child insertions/removals with no
         // per-child margin bookkeeping
         GradientDrawable gap = new GradientDrawable();
         gap.setColor(Color.TRANSPARENT);
-        gap.setSize(4, 4);
+        int gapPx = Math.round(1.5f * getResources().getDisplayMetrics().density);
+        gap.setSize(gapPx, gapPx);
         boardStack.setDividerDrawable(gap);
         boardStack.setShowDividers(LinearLayout.SHOW_DIVIDER_MIDDLE);
         boardStack.setDividerPadding(0);
