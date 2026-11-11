@@ -2,7 +2,7 @@ Feature: eBoard edit mode and widget adder
   Long pressing empty board space opens the widget adder: a bottom popover
   half the screen high that lists every app's widget kind. Long pressing a
   widget enters edit mode, where each widget shows an (x) remove handle and
-  can be reordered. The add button exists only on an empty board.
+  can be resized and reordered. The add button exists only on an empty board.
 
   Background:
     Given a "Digital" widget provider offering "A digital clock widget" is installed
@@ -76,6 +76,13 @@ Feature: eBoard edit mode and widget adder
     When I long press the widget row
     And the second widget is moved before the first
     Then the board order is "12,11"
+
+  Scenario: Widgets can be resized in edit mode
+    When I add a widget from the widget adder
+    And I long press the widget row
+    And the widget is resized to 300dp
+    Then the widget height is stored as 300dp
+    And the widget is rendered 300dp tall
 
   Scenario: The adder popover can be reopened after use
     When I add a widget from the widget adder
