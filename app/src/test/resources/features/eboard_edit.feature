@@ -84,6 +84,10 @@ Feature: eBoard edit mode and widget adder
     Then the widget height is stored as 300dp
     And the widget is rendered 300dp tall
 
+  Scenario: Widgets are separated by a margin
+    Given the board has 2 widgets
+    Then the board has a 4 pixel margin between widgets
+
   Scenario: The adder popover can be reopened after use
     When I add a widget from the widget adder
     And I dismiss the widget adder popover

@@ -403,4 +403,9 @@ public class DashboardSteps {
     public void widgetRenderedTall(int dp) {
         assertEquals(dp, world.renderedRowHeightDp(0));
     }
+
+    @Then("the board has a {int} pixel margin between widgets")
+    public void boardHasPixelMarginBetweenWidgets(int px) {
+        assertEquals(px, world.stackGapPx());
+    }
 }
