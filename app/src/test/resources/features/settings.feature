@@ -35,6 +35,23 @@ Feature: Settings screen
     Then the left gesture button shows "eBoard"
     And the left gesture package is stored as "@eboard"
 
+  Scenario: Adding a link to the left gesture
+    Given the settings screen is open
+    When I tap the left gesture button
+    And I press "Add link" in the dialog
+    And I name the link "Hacker News" at "news.ycombinator.com"
+    And I add the link
+    Then the left gesture button shows "Hacker News"
+    And the left gesture stores the link "Hacker News" at "https://news.ycombinator.com"
+
+  Scenario: Adding an app URI to the right gesture keeps its scheme
+    Given the settings screen is open
+    When I tap the right gesture button
+    And I press "Add link" in the dialog
+    And I name the link "F-Droid" at "market://details?id=org.fdroid.fdroid"
+    And I add the link
+    Then the right gesture stores the link "F-Droid" at "market://details?id=org.fdroid.fdroid"
+
   Scenario: The app picker shows an icon for every app
     Given the settings screen is open
     When I tap the left gesture button

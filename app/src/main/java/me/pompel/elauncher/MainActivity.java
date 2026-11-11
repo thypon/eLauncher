@@ -411,11 +411,25 @@ public class MainActivity extends AppCompatActivity {
                     builder1.create();
                     builder1.show();
                 });
+                builder.setPositiveButton(getString(R.string.gesture_picker_add_link), (dialog, which) ->
+                    AppLink.showDialog(MainActivity.this, (title, uri) -> {
+                        textView.setText(title);
+                        prefs.edit()
+                            .putString(String.valueOf(textView.getTag()), title)
+                            .putString("p" + textView.getTag(), AppLink.encode(title, uri))
+                            .apply();
+                    }));
                 builder.create();
                 builder.show();
                 return true;
             });
-            textView.setOnClickListener(v -> openAppWithIntent(getPackageManager().getLaunchIntentForPackage(prefs.getString("p" + textView.getTag(), "")), true));
+            textView.setOnClickListener(v -> {
+                String value = prefs.getString("p" + textView.getTag(), "");
+                Intent intent = AppLink.isLink(value)
+                    ? new Intent(Intent.ACTION_VIEW, Uri.parse(AppLink.decode(value).uri()))
+                    : getPackageManager().getLaunchIntentForPackage(value);
+                openAppWithIntent(intent, true);
+            });
             homescreen.addView(textView);
         }
 
@@ -585,6 +599,12 @@ public class MainActivity extends AppCompatActivity {
             Intent intent = new Intent(this, DashboardActivity.class);
             intent.putExtra(DashboardActivity.EXTRA_ENTRY_DIRECTION, swipeEnterDirection);
             safeStartActivity(intent);
+            return;
+        }
+        if (AppLink.isLink(pkg)) {
+            // a link target goes through the system's URI handler (browser,
+            // store app, ...) with the same directional animation
+            safeStartActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(AppLink.decode(pkg).uri())));
             return;
         }
         Intent intent = getPackageManager().getLaunchIntentForPackage(pkg);

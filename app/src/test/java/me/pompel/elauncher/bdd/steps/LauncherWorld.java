@@ -901,6 +901,33 @@ public class LauncherWorld {
         idle();
     }
 
+    /** Fills the title and address fields of the "Add link" dialog (the two
+     * EditTexts of the latest dialog, in insertion order). */
+    public void fillLinkDialog(String title, String address) {
+        java.util.List<android.widget.EditText> inputs = new java.util.ArrayList<>();
+        findInDialogAll(v -> v instanceof android.widget.EditText, inputs);
+        if (inputs.size() < 2) throw new AssertionError("The link dialog needs a title and an address field");
+        inputs.get(0).setText(title);
+        inputs.get(1).setText(address);
+        idle();
+    }
+
+    private void findInDialogAll(java.util.function.Predicate<android.view.View> test, java.util.List<android.widget.EditText> out) {
+        android.app.Dialog latest = org.robolectric.shadows.ShadowDialog.getLatestDialog();
+        if (latest == null) throw new AssertionError("No dialog shown");
+        collectAll(latest.getWindow().getDecorView(), test, out);
+    }
+
+    private void collectAll(android.view.View view, java.util.function.Predicate<android.view.View> test, java.util.List<android.widget.EditText> out) {
+        if (test.test(view)) out.add((android.widget.EditText) view);
+        if (view instanceof android.view.ViewGroup) {
+            android.view.ViewGroup group = (android.view.ViewGroup) view;
+            for (int i = 0; i < group.getChildCount(); i++) {
+                collectAll(group.getChildAt(i), test, out);
+            }
+        }
+    }
+
     /** Clicks the button with the given text ("Add", "Cancel", ...) in the latest dialog. */
     public void confirmDialog(String buttonText) {
         android.widget.Button button = findInDialog(android.widget.Button.class, buttonText);

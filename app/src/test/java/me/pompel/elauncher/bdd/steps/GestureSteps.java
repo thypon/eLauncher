@@ -5,6 +5,7 @@ import io.cucumber.java.en.Given;
 import io.cucumber.java.en.Then;
 import io.cucumber.java.en.When;
 import me.pompel.elauncher.DashboardActivity;
+import me.pompel.elauncher.AppLink;
 import me.pompel.elauncher.GesturePreference;
 import me.pompel.elauncher.MainActivity;
 import me.pompel.elauncher.R;
@@ -47,6 +48,11 @@ public class GestureSteps {
     @Given("the {word} gesture is assigned to eBoard")
     public void gestureAssignedToEboard(String side) {
         world.setGesturePackage(side, GesturePreference.EBOARD_PACKAGE);
+    }
+
+    @Given("the link {string} at {string} is assigned to the {word} gesture")
+    public void linkAssignedToGesture(String title, String address, String side) {
+        world.setGesturePackage(side, AppLink.encode(title, address));
     }
 
     @When("I fling {word} on the home screen")

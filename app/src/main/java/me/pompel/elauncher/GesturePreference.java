@@ -55,6 +55,9 @@ public class GesturePreference extends Preference {
         if (EBOARD_PACKAGE.equals(packageName)) {
             return getContext().getString(R.string.eboard_name);
         }
+        if (AppLink.isLink(packageName)) {
+            return AppLink.decode(packageName).title();
+        }
         try {
             android.content.pm.PackageManager pm = getContext().getPackageManager();
             return pm.getApplicationLabel(pm.getApplicationInfo(packageName, 0)).toString();
@@ -80,6 +83,17 @@ public class GesturePreference extends Preference {
                 public void onClick(DialogInterface dialog, int which) {
                     getSharedPreferences().edit().putString(isLeft ? KEY_LEFT_GESTURE : KEY_RIGHT_GESTURE, apps.get(which).packageName).apply();
                     notifyChanged();
+                }
+            })
+            .setPositiveButton(R.string.gesture_picker_add_link, new DialogInterface.OnClickListener() {
+                @Override
+                public void onClick(DialogInterface dialog, int which) {
+                    AppLink.showDialog(getContext(), (title, uri) -> {
+                        getSharedPreferences().edit()
+                            .putString(isLeft ? KEY_LEFT_GESTURE : KEY_RIGHT_GESTURE, AppLink.encode(title, uri))
+                            .apply();
+                        notifyChanged();
+                    });
                 }
             })
             .setNeutralButton(R.string.gesture_picker_reset, new DialogInterface.OnClickListener() {
