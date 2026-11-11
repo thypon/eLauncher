@@ -161,6 +161,24 @@ public class WidgetPrefsTest {
     }
 
     @Test
+    public void setHeightClampsAndPersists() {
+        WidgetPrefs prefs = prefs();
+        prefs.add(1, 200);
+        prefs.setHeight(1, 50);
+        assertEquals(WidgetPrefs.MIN_HEIGHT_DP, prefs.heightAt(0));
+        prefs.setHeight(1, 100000);
+        assertEquals(WidgetPrefs.MAX_HEIGHT_DP, prefs.heightAt(0));
+        assertEquals(WidgetPrefs.MAX_HEIGHT_DP, new WidgetPrefs(rawPrefs()).heightAt(0));
+    }
+
+    @Test
+    public void setHeightUnknownIdIsNoOp() {
+        WidgetPrefs prefs = prefs();
+        prefs.setHeight(99, 300);
+        assertEquals(Collections.emptyList(), prefs.widgets());
+    }
+
+    @Test
     public void setTapsPersists() {
         WidgetPrefs prefs = prefs();
         prefs.add(1, 200);
@@ -175,6 +193,7 @@ public class WidgetPrefsTest {
         prefs.add(42, 200);
         prefs.add(7, 150);
         prefs.move(1, 0);
+        prefs.setHeight(42, 300);
         prefs.setTaps(7, WidgetTaps.DOUBLE_TAP);
         prefs.remove(42);
         prefs.add(9, 480);
@@ -199,7 +218,7 @@ public class WidgetPrefsTest {
             List<WidgetEntry> model = new java.util.ArrayList<>();
             int nextId = 1;
             for (int step = 0; step < 40; step++) {
-                int op = random.nextInt(4);
+                int op = random.nextInt(5);
                 if (op == 0 && nextId <= 12) {
                     int id = nextId++;
                     int height = 140 + random.nextInt(461);
@@ -212,6 +231,10 @@ public class WidgetPrefsTest {
                         prefs.remove(id);
                         model.remove(index);
                     } else if (op == 2) {
+                        int height = 140 + random.nextInt(461);
+                        prefs.setHeight(id, height);
+                        model.set(index, model.get(index).withHeight(height));
+                    } else if (op == 3) {
                         WidgetTaps taps = WidgetTaps.values()[random.nextInt(3)];
                         prefs.setTaps(id, taps);
                         model.set(index, model.get(index).withTaps(taps));

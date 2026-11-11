@@ -30,6 +30,10 @@ public final class WidgetEntry {
         return taps;
     }
 
+    public WidgetEntry withHeight(int newHeightDp) {
+        return new WidgetEntry(id, newHeightDp, taps);
+    }
+
     public WidgetEntry withTaps(WidgetTaps newTaps) {
         return new WidgetEntry(id, heightDp, newTaps);
     }

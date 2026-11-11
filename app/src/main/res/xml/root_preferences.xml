@@ -30,13 +30,4 @@
         app:summary="@string/lock_portrait_summary"
         app:defaultValue="true"
         app:layout="@layout/preference_row" />
-    <SeekBarPreference
-        app:key="eboard_density_preference"
-        app:title="@string/eboard_density_title"
-        app:summary="@string/eboard_density_summary"
-        app:defaultValue="100"
-        app:min="50"
-        android:max="200"
-        app:showSeekBarValue="true"
-        app:layout="@layout/preference_seekbar_row" />
 </PreferenceScreen>
