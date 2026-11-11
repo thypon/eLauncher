@@ -1540,6 +1540,19 @@ public class LauncherWorld {
         return h[0];
     }
 
+    /** Pixel gap between the first two stack children (the divider spacing). */
+    public int stackGapPx() {
+        int[] gap = new int[1];
+        dashboardScenario.onActivity(a -> {
+            android.view.ViewGroup stack =
+                    (android.view.ViewGroup) a.findViewById(me.pompel.elauncher.R.id.board_stack);
+            gap[0] = stack.getChildCount() >= 2
+                    ? stack.getChildAt(1).getTop() - stack.getChildAt(0).getBottom()
+                    : -1;
+        });
+        return gap[0];
+    }
+
     /** Seeds the board store directly (ids only, no binding) — for stale-widget
      * scenarios. Deliberately writes the legacy BoardStore key so the
      * WidgetPrefs migration is exercised on first read. */
