@@ -75,22 +75,6 @@ public final class WidgetPrefs {
         save(widgets);
     }
 
-    /** Persists a row height in dp (clamped into MIN..MAX); unknown ids are no-ops. */
-    public void setHeight(int id, int heightDp) {
-        List<WidgetEntry> widgets = widgets();
-        List<WidgetEntry> out = new ArrayList<>();
-        boolean changed = false;
-        for (WidgetEntry widget : widgets) {
-            if (widget.id() == id && widget.heightDp() != clampHeight(heightDp)) {
-                out.add(widget.withHeight(clampHeight(heightDp)));
-                changed = true;
-            } else {
-                out.add(widget);
-            }
-        }
-        if (changed) save(out);
-    }
-
     /** Persists how touches on a widget are handled; unknown ids are no-ops. */
     public void setTaps(int id, WidgetTaps taps) {
         List<WidgetEntry> widgets = widgets();

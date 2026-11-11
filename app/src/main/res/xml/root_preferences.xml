@@ -22,6 +22,7 @@
         app:key="animations_preference"
         app:title="@string/animations_title"
         app:summary="@string/animations_summary"
+        app:defaultValue="true"
         app:layout="@layout/preference_row" />
     <SwitchPreferenceCompat
         app:key="lock_portrait_preference"

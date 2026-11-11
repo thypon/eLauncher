@@ -1147,9 +1147,6 @@ public class LauncherWorld {
      * HOLD_MS, then release — the adder popover must open. */
     public void holdBoardEmptyBelowWidgets() {
         dashboardScenario.onActivity(a -> {
-            if (a.rowCount() > 0) {
-                a.applyRowHeight(0, me.pompel.elauncher.DashboardActivity.MIN_HEIGHT_DP);
-            }
             android.view.View board = a.findViewById(me.pompel.elauncher.R.id.board);
             android.view.ViewGroup stack =
                     (android.view.ViewGroup) a.findViewById(me.pompel.elauncher.R.id.board_stack);
@@ -1344,10 +1341,6 @@ public class LauncherWorld {
 
     public void pressBoardEmpty() {
         dashboardScenario.onActivity(a -> {
-            // with a small test display the widget may cover the board: shrink
-            // the first row to its minimum so empty space exists below it
-            if (a.rowCount() > 0) a.applyRowHeight(0,
-                    me.pompel.elauncher.DashboardActivity.MIN_HEIGHT_DP);
             // dispatch directly on the board: the ScrollView is the touch
             // target on empty board space, where the hold/exit logic lives
             android.view.View board = a.findViewById(me.pompel.elauncher.R.id.board);
@@ -1524,20 +1517,6 @@ public class LauncherWorld {
             sb.append(id);
         }
         return sb.toString();
-    }
-
-    public int storedHeight(int position) {
-        return widgetPrefs().heightAt(position);
-    }
-
-    public int renderedRowHeightDp(int position) {
-        int[] h = new int[1];
-        dashboardScenario.onActivity(a -> {
-            android.view.View row = a.boardRowAt(position);
-            float density = a.getResources().getDisplayMetrics().density;
-            h[0] = row == null ? -1 : Math.round(row.getHeight() / density);
-        });
-        return h[0];
     }
 
     /** Seeds the board store directly (ids only, no binding) — for stale-widget
