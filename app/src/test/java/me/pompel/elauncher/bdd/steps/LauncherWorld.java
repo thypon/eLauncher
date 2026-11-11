@@ -1553,6 +1553,14 @@ public class LauncherWorld {
         return gap[0];
     }
 
+    /** Screen density of the dashboard activity (px-per-dp for assertions). */
+    public float density() {
+        float[] d = new float[1];
+        dashboardScenario.onActivity(a ->
+                d[0] = a.getResources().getDisplayMetrics().density);
+        return d[0];
+    }
+
     /** Seeds the board store directly (ids only, no binding) — for stale-widget
      * scenarios. Deliberately writes the legacy BoardStore key so the
      * WidgetPrefs migration is exercised on first read. */
