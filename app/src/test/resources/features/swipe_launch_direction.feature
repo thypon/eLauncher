@@ -32,3 +32,8 @@ Feature: Directional swipe launch animation
     And home slot 0 is assigned to "Cool"
     When I tap home slot 0
     Then the launched activity uses the default system animation
+
+  Scenario: A link on the left gesture opens its address
+    Given the link "Hacker News" at "https://news.ycombinator.com" is assigned to the left gesture
+    When I fling right on the home screen
+    Then the link address opens

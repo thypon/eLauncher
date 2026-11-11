@@ -52,6 +52,18 @@ Feature: Home screen slots
     Then home slot 1 is labeled "My Gamma"
     And the assignment for slot 1 is stored with app "Gamma"
 
+  Scenario: Assigning a link to a slot opens its address
+    Given the home screen has 2 slots configured
+    And the launcher is started
+    When I long-press home slot 0
+    And I press "Add link" in the dialog
+    And I name the link "Hacker News" at "news.ycombinator.com"
+    And I add the link
+    Then home slot 0 is labeled "Hacker News"
+    And home slot 0 stores the link "Hacker News" at "https://news.ycombinator.com"
+    When I tap home slot 0
+    Then the link address opens
+
   Scenario: The slot picker shows an icon per app
     Given the home screen has 2 slots configured
     And the launcher is started

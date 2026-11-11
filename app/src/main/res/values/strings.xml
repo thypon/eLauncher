@@ -21,6 +21,11 @@
     <string name="gesture_picker_reset">Reset to Default</string>
     <string name="gesture_picker_cancel">Cancel</string>
     <string name="gesture_picker_icon_desc">App icon</string>
+    <string name="gesture_picker_add_link">Add link</string>
+    <string name="link_dialog_title">Add link</string>
+    <string name="link_hint_name">Title</string>
+    <string name="link_hint_uri">Address</string>
+    <string name="link_dialog_add">Add</string>
     <string name="eboard_name">eBoard</string>
     <!-- fixture text for the widget-kind description (see LauncherWorld.installWidgetProvider) -->
     <string name="eboard_kind_sample">A digital clock widget</string>
