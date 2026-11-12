@@ -38,8 +38,11 @@ import android.transition.TransitionManager;
 import android.util.Log;
 import android.util.TypedValue;
 import android.view.GestureDetector;
+import android.view.HapticFeedbackConstants;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewGroup;
+import android.view.ViewConfiguration;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.EditText;
 import android.widget.LinearLayout;
@@ -60,6 +63,17 @@ public class MainActivity extends AppCompatActivity {
     private static final String LOCK_PORTRAIT = "lock_portrait_preference";
     private static final float SLOT_TEXT_SIZE_DIP = 32f;
     private static final int SLOT_INTERLINE_PX = 50;
+
+    // Slot drag-to-reorder state (one touch gesture at a time)
+    private boolean slotDragPending;
+    private boolean slotDragging;
+    private float slotDownY;
+    private int slotOrigIndex;
+    private int slotCurrentIndex;
+    private TextView slotDragView;
+    private Runnable slotLongPressRunnable;
+    private final java.util.List<String> slotLabels = new ArrayList<>();
+    private final java.util.List<String> slotPackages = new ArrayList<>();
 
     private ArrayList<App> appList;
     private EditText search;
@@ -197,6 +211,9 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void safeStartActivity(Intent intent) {
+        if (intent != null) {
+            System.out.println("DIAGSTART " + intent + "\n" + android.util.Log.getStackTraceString(new Throwable()));
+        }
         int[] anims = swipeLaunchAnimations(swipeEnterDirection);
         swipeEnterDirection = 0;
         if (intent == null) return;
@@ -416,42 +433,6 @@ public class MainActivity extends AppCompatActivity {
             textView.setText(prefs.getString(Integer.toString(i), "App"));
             textView.setTag(i);
             textView.setLayoutParams(params);
-            textView.setOnLongClickListener(v -> {
-                loadApps();
-                List<AppPickerAdapter.AppRow> rows = new ArrayList<>();
-                for (App app : appList) rows.add(new AppPickerAdapter.AppRow(app.appName.toString(), app.packageId));
-                AlertDialog.Builder builder = new AlertDialog.Builder(MainActivity.this);
-                builder.setTitle("Select app");
-                builder.setAdapter(new AppPickerAdapter(MainActivity.this, rows), (dialog, which) -> {
-                    AlertDialog.Builder builder1 = new AlertDialog.Builder(MainActivity.this);
-                    builder1.setTitle("Set app name");
-                    final EditText input = new EditText(MainActivity.this);
-                    input.setText(appList.get(which).appName);
-                    builder1.setView(input);
-                    input.setTag(appList.get(which).packageId);
-                    builder1.setPositiveButton("Add", (dialog1, which1) -> {
-                        String name = input.getText().toString();
-                        textView.setText(name);
-                        SharedPreferences.Editor editor = prefs.edit();
-                        editor.putString(String.valueOf(textView.getTag()), name);
-                        editor.putString("p" + textView.getTag(), String.valueOf(input.getTag()));
-                        editor.apply();
-                    });
-                    builder1.create();
-                    builder1.show();
-                });
-                builder.setPositiveButton(getString(R.string.gesture_picker_add_link), (dialog, which) ->
-                    AppLink.showDialog(MainActivity.this, (title, uri) -> {
-                        textView.setText(title);
-                        prefs.edit()
-                            .putString(String.valueOf(textView.getTag()), title)
-                            .putString("p" + textView.getTag(), AppLink.encode(title, uri))
-                            .apply();
-                    }));
-                builder.create();
-                builder.show();
-                return true;
-            });
             textView.setOnClickListener(v -> {
                 String value = prefs.getString("p" + textView.getTag(), "");
                 Intent intent = AppLink.isLink(value)
@@ -465,6 +446,7 @@ public class MainActivity extends AppCompatActivity {
                 }
                 openAppWithIntent(intent, true);
             });
+            makeSlotDraggable(textView);
             homescreen.addView(textView);
         }
 
@@ -489,6 +471,176 @@ public class MainActivity extends AppCompatActivity {
 
         new SwipeListener(homescreen);
 
+    }
+
+    /**
+     * Long-press a slot to pick it up; keep holding and move to reorder it
+     * live, release over a new position to drop it there. A long-press
+     * released without moving opens the app picker, and a quick tap still
+     * launches the assigned app.
+     */
+    private void makeSlotDraggable(TextView slot) {
+        slot.setOnTouchListener((v, ev) -> {
+            switch (ev.getActionMasked()) {
+                case MotionEvent.ACTION_DOWN:
+                    slotDragPending = false;
+                    slotDragging = false;
+                    slotDragView = null;
+                    slotDownY = ev.getY();
+                    slotLongPressRunnable = () -> {
+                        slotDragPending = true;
+                        v.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS);
+                    };
+                    v.postDelayed(slotLongPressRunnable, ViewConfiguration.getLongPressTimeout());
+                    return false;
+                case MotionEvent.ACTION_MOVE: {
+                    float dy = ev.getY() - slotDownY;
+                    if (slotDragging) {
+                        dragSlotTo((TextView) v, dy);
+                        return true;
+                    }
+                    if (slotDragPending) {
+                        slotDragging = true;
+                        slotDragView = (TextView) v;
+                        slotOrigIndex = ((ViewGroup) v.getParent()).indexOfChild(v);
+                        slotCurrentIndex = slotOrigIndex;
+                        snapshotSlots();
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                            v.setElevation(getResources().getDisplayMetrics().density * 6);
+                        }
+                        dragSlotTo((TextView) v, dy);
+                        return true;
+                    }
+                    if (Math.abs(dy) > ViewConfiguration.get(this).getScaledTouchSlop()) {
+                        v.removeCallbacks(slotLongPressRunnable);
+                    }
+                    return false;
+                }
+                case MotionEvent.ACTION_UP:
+                case MotionEvent.ACTION_CANCEL:
+                    v.removeCallbacks(slotLongPressRunnable);
+                    if (slotDragging) {
+                        endSlotDrag();
+                        return true;
+                    }
+                    if (slotDragPending && ev.getActionMasked() == MotionEvent.ACTION_UP) {
+                        slotDragPending = false;
+                        openAppPicker((TextView) v);
+                        return true;
+                    }
+                    slotDragPending = false;
+                    return false;
+                default:
+                    v.removeCallbacks(slotLongPressRunnable);
+                    slotDragPending = false;
+                    return false;
+            }
+        });
+    }
+
+    /** Moves the dragged row live: repositions it in the stack (and in the
+     * backing data) whenever the finger crosses a neighbouring row. */
+    private void dragSlotTo(TextView dragged, float dy) {
+        int slotCount = prefs.getInt(NUMBER_OF_APPS, 8);
+        int slotHeight = dragged.getHeight() > 0 ? dragged.getHeight() : 1;
+        int target = Math.max(0, Math.min(slotCount - 1,
+                slotOrigIndex + Math.round(dy / slotHeight)));
+        // after a swap the row's own top moved too; shift it so the finger
+        // keeps grabbing the same point of the row
+        dragged.setTranslationY(dy - (target - slotOrigIndex) * slotHeight);
+        if (target == slotCurrentIndex) {
+            return;
+        }
+        LinearLayout home = (LinearLayout) dragged.getParent();
+        String label = slotLabels.remove(slotCurrentIndex);
+        String pkg = slotPackages.remove(slotCurrentIndex);
+        slotLabels.add(target, label);
+        slotPackages.add(target, pkg);
+        home.removeView(dragged);
+        home.addView(dragged, target);
+        slotCurrentIndex = target;
+        rebindSlots(home);
+    }
+
+    /** Copies the current slot labels/packages into the drag state. */
+    private void snapshotSlots() {
+        LinearLayout home = (LinearLayout) slotDragView.getParent();
+        int n = prefs.getInt(NUMBER_OF_APPS, 8);
+        slotLabels.clear();
+        slotPackages.clear();
+        for (int i = 0; i < n; i++) {
+            TextView child = (TextView) home.getChildAt(i);
+            slotLabels.add(child.getText().toString());
+            slotPackages.add(prefs.getString("p" + i, ""));
+        }
+    }
+
+    /** Re-applies the drag-state order to the first slotCount rows of the stack. */
+    private void rebindSlots(LinearLayout home) {
+        int n = prefs.getInt(NUMBER_OF_APPS, 8);
+        for (int i = 0; i < n; i++) {
+            TextView child = (TextView) home.getChildAt(i);
+            child.setTag(i);
+            child.setText(slotLabels.get(i));
+        }
+    }
+
+    /** Drops the dragged row: clears the drag visuals and persists the new
+     * order into the slot preferences. */
+    private void endSlotDrag() {
+        slotDragging = false;
+        if (slotDragView != null) {
+            slotDragView.setTranslationY(0);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                slotDragView.setElevation(0);
+            }
+        }
+        SharedPreferences.Editor editor = prefs.edit();
+        for (int i = 0; i < slotLabels.size(); i++) {
+            editor.putString(String.valueOf(i), slotLabels.get(i));
+            editor.putString("p" + i, slotPackages.get(i));
+        }
+        editor.apply();
+        homeUpdateUsage();
+    }
+
+    /** The long-press app picker for a slot: pick an installed app, rename it,
+     * or add a link. Cancel sits left of Add link. */
+    private void openAppPicker(TextView slot) {
+        loadApps();
+        List<AppPickerAdapter.AppRow> rows = new ArrayList<>();
+        for (App app : appList) rows.add(new AppPickerAdapter.AppRow(app.appName.toString(), app.packageId));
+        AlertDialog.Builder builder = new AlertDialog.Builder(MainActivity.this);
+        builder.setTitle("Select app");
+        builder.setAdapter(new AppPickerAdapter(MainActivity.this, rows), (dialog, which) -> {
+            AlertDialog.Builder builder1 = new AlertDialog.Builder(MainActivity.this);
+            builder1.setTitle("Set app name");
+            final EditText input = new EditText(MainActivity.this);
+            input.setText(appList.get(which).appName);
+            builder1.setView(input);
+            input.setTag(appList.get(which).packageId);
+            builder1.setPositiveButton("Add", (dialog1, which1) -> {
+                String name = input.getText().toString();
+                slot.setText(name);
+                SharedPreferences.Editor editor = prefs.edit();
+                editor.putString(String.valueOf(slot.getTag()), name);
+                editor.putString("p" + slot.getTag(), String.valueOf(input.getTag()));
+                editor.apply();
+            });
+            builder1.create();
+            builder1.show();
+        });
+        builder.setPositiveButton(getString(R.string.gesture_picker_add_link), (dialog, which) ->
+            AppLink.showDialog(MainActivity.this, (title, uri) -> {
+                slot.setText(title);
+                prefs.edit()
+                    .putString(String.valueOf(slot.getTag()), title)
+                    .putString("p" + slot.getTag(), AppLink.encode(title, uri))
+                    .apply();
+            }));
+        builder.setNegativeButton(R.string.gesture_picker_cancel, null);
+        builder.create();
+        builder.show();
     }
 
     /**

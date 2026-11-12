@@ -107,4 +107,14 @@ public class HomeSteps {
     public void slotTextDefaultSize() {
         assertTrue("slot text should keep its default size when everything fits", world.homeSlotTextDefaultSize());
     }
+
+    @Then("the app picker shows Cancel left of {string}")
+    public void pickerCancelButtonLeftOf(String rightLabel) {
+        world.pickerCancelButtonLeftOf(rightLabel);
+    }
+
+    @When("I drag home slot {int} down past slot {int}")
+    public void iDragSlotDown(int from, int past) {
+        world.dragSlotDown(from, past);
+    }
 }

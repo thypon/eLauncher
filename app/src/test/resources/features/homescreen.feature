@@ -140,3 +140,35 @@ Feature: Home screen slots
     And the launcher is started
     Then every home slot is visible on screen
     And the home slot text keeps its default size
+
+  Scenario: The app picker offers a cancel button
+    Given the home screen has 2 slots configured
+    And the launcher is started
+    When I long-press home slot 0
+    Then the app picker shows Cancel left of "Add link"
+    When I press "Cancel" in the dialog
+    Then no app was launched
+
+  Scenario: Long-press dragging a slot reorders the apps
+    Given the home screen has 3 slots configured
+    And home slot 0 is assigned to "Alpha"
+    And home slot 1 is assigned to "Beta"
+    And home slot 2 is assigned to "Gamma"
+    And the launcher is started
+    When I drag home slot 0 down past slot 1
+    Then home slot 0 is labeled "Beta"
+    And home slot 1 is labeled "Alpha"
+    And home slot 2 is labeled "Gamma"
+    And the assignment for slot 0 is stored with app "Beta"
+    And the assignment for slot 1 is stored with app "Alpha"
+
+  Scenario: A dragged slot order survives a relaunch
+    Given the home screen has 3 slots configured
+    And home slot 0 is assigned to "Alpha"
+    And home slot 1 is assigned to "Beta"
+    And home slot 2 is assigned to "Gamma"
+    And the launcher is started
+    When I drag home slot 0 down past slot 1
+    And the launcher is relaunched
+    Then home slot 0 is labeled "Beta"
+    And home slot 1 is labeled "Alpha"
