@@ -66,6 +66,12 @@ public class LauncherWorld {
         resetWidgetManagerShadow();
         // the widget host shadow counts allocations/configure launches statically
         me.pompel.elauncher.unit.ShadowConfigureHost.resetAllocations();
+        // ShadowActivity records started intents for the whole sandbox; a
+        // scenario that launches an app would otherwise fail later
+        // "no app was launched" assertions in the same feature
+        org.robolectric.shadows.ShadowApplication shadowApp =
+                org.robolectric.Shadows.shadowOf((Application) appContext());
+        shadowApp.clearNextStartedActivities();
     }
 
     /** Clears the shadow AppWidgetManager's provider/widget bookkeeping. */
@@ -850,7 +856,41 @@ public class LauncherWorld {
     public void longPressSlot(int slot) {
         scenario.onActivity(a -> {
             android.widget.LinearLayout home = (android.widget.LinearLayout) a.findViewById(R.id.HomeScreen);
-            home.getChildAt(slot).performLongClick();
+            View target = home.getChildAt(slot);
+            int hold = android.view.ViewConfiguration.getLongPressTimeout() + 150;
+            long now = android.os.SystemClock.uptimeMillis();
+            target.dispatchTouchEvent(android.view.MotionEvent.obtain(now, now, android.view.MotionEvent.ACTION_DOWN,
+                    target.getWidth() / 2f, target.getHeight() / 2f, 0));
+            idle(hold);
+            target.dispatchTouchEvent(android.view.MotionEvent.obtain(now, now + hold, android.view.MotionEvent.ACTION_UP,
+                    target.getWidth() / 2f, target.getHeight() / 2f, 0));
+        });
+        idle();
+    }
+
+    /** Drags slot {@code from} downwards past slot {@code past} with real touch events:
+     * DOWN, hold past the long-press timeout, stepped MOVEs, UP. */
+    public void dragSlotDown(int from, int past) {
+        scenario.onActivity(a -> {
+            android.widget.LinearLayout home = (android.widget.LinearLayout) a.findViewById(R.id.HomeScreen);
+            View target = home.getChildAt(from);
+            int slotHeight = target.getHeight() > 0 ? target.getHeight() : 90;
+            int hold = android.view.ViewConfiguration.getLongPressTimeout() + 150;
+            long now = android.os.SystemClock.uptimeMillis();
+            float x = target.getWidth() / 2f;
+            float startY = target.getHeight() / 2f;
+            float dy = slotHeight * (past - from + 0.3f);
+            target.dispatchTouchEvent(android.view.MotionEvent.obtain(now, now, android.view.MotionEvent.ACTION_DOWN, x, startY, 0));
+            idle(hold);
+            int steps = 6;
+            for (int s = 1; s <= steps; s++) {
+                long t = now + hold + s;
+                target.dispatchTouchEvent(android.view.MotionEvent.obtain(now, t, android.view.MotionEvent.ACTION_MOVE,
+                        x, startY + dy * s / steps, 0));
+            }
+            idle();
+            target.dispatchTouchEvent(android.view.MotionEvent.obtain(now, now + hold + steps + 1,
+                    android.view.MotionEvent.ACTION_UP, x, startY + dy, 0));
         });
         idle();
     }
@@ -957,6 +997,34 @@ public class LauncherWorld {
         inputs.get(0).setText(title);
         inputs.get(1).setText(address);
         idle();
+    }
+
+    /** Asserts the latest dialog shows a "Cancel" button positioned to the left of the
+     * button labelled {@code rightLabel} (both force-laid-out, since Robolectric dialog
+     * layout passes are lazy). */
+    public void pickerCancelButtonLeftOf(String rightLabel) {
+        idle();
+        android.widget.Button cancel = findInDialog(android.widget.Button.class, "Cancel");
+        if (cancel == null) {
+            java.util.List<android.widget.EditText> buttons = new java.util.ArrayList<>();
+            org.robolectric.shadows.ShadowDialog latest = null;
+            android.app.Dialog d = org.robolectric.shadows.ShadowDialog.getLatestDialog();
+            if (d == null) throw new AssertionError("No dialog shown at all");
+            collectAll(d.getWindow().getDecorView(), v -> v instanceof android.widget.Button, buttons);
+            StringBuilder names = new StringBuilder();
+            for (android.widget.EditText b : buttons) names.append("[").append(((TextView) b).getText()).append("]");
+            throw new AssertionError("No Cancel button in the app picker dialog; buttons present: " + names
+                    + " showing=" + d.isShowing());
+        }
+        android.widget.Button right = findInDialog(android.widget.Button.class, rightLabel);
+        if (right == null) throw new AssertionError("No " + rightLabel + " button in the app picker dialog");
+        int[] cancelPos = new int[2];
+        int[] rightPos = new int[2];
+        cancel.getLocationOnScreen(cancelPos);
+        right.getLocationOnScreen(rightPos);
+        if (cancelPos[0] >= rightPos[0]) {
+            throw new AssertionError("Cancel (" + cancelPos[0] + ") must sit left of " + rightLabel + " (" + rightPos[0] + ")");
+        }
     }
 
     private void findInDialogAll(java.util.function.Predicate<android.view.View> test, java.util.List<android.widget.EditText> out) {
