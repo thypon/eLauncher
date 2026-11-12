@@ -117,4 +117,25 @@ public class HomeSteps {
     public void iDragSlotDown(int from, int past) {
         world.dragSlotDown(from, past);
     }
+
+    @When("I long-press home slot {int} with a drifting finger")
+    public void iLongPressSlotWithDrift(int slot) {
+        world.longPressSlotWithDrift(slot);
+    }
+
+    @When("I pick up home slot {int} and drag it towards slot {int}")
+    public void iPickUpSlot(int from, int towards) {
+        world.pickUpSlot(from, towards);
+    }
+
+    @When("I drop it")
+    public void iDropSlot() {
+        world.dropSlot();
+    }
+
+    @Then("the picked slot follows the finger")
+    public void pickedSlotFollowsFinger() {
+        assertTrue("the picked slot should track the finger one to one while held",
+                world.pickedSlotFollowsFinger());
+    }
 }

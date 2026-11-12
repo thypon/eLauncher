@@ -437,6 +437,12 @@ public class LauncherWorld {
      * exit animation can be asserted even after the activity finishes. */
     public me.pompel.elauncher.DashboardActivity dashboardFlingTarget;
 
+    /** State of an in-flight pickUpSlot()/dropSlot() drag gesture. */
+    private View pickedSlotView;
+    private float pickedSlotX;
+    private float pickedSlotY;
+    private float pickedSlotDy;
+
     /** Horizontal fling on the eBoard dashboard screen. Mirrors fling() on
      * the home screen: ~60px per 16ms, center start. Captures the activity
      * reference first so the pending transition can be asserted later. */
@@ -893,6 +899,81 @@ public class LauncherWorld {
                     android.view.MotionEvent.ACTION_UP, x, startY + dy, 0));
         });
         idle();
+    }
+
+    /** Long-presses a slot while the finger drifts beyond the touch slop,
+     * the way a real finger wobbles during a long hold. The long press must
+     * survive the drift. */
+    public void longPressSlotWithDrift(int slot) {
+        scenario.onActivity(a -> {
+            android.widget.LinearLayout home = (android.widget.LinearLayout) a.findViewById(R.id.HomeScreen);
+            View target = home.getChildAt(slot);
+            int hold = android.view.ViewConfiguration.getLongPressTimeout() + 150;
+            int slop = android.view.ViewConfiguration.get(a).getScaledTouchSlop();
+            long now = android.os.SystemClock.uptimeMillis();
+            float x = target.getWidth() / 2f;
+            float y = target.getHeight() / 2f;
+            target.dispatchTouchEvent(android.view.MotionEvent.obtain(now, now,
+                    android.view.MotionEvent.ACTION_DOWN, x, y, 0));
+            // drift well past the touch slop while the hold is pending, then
+            // keep the finger still for the rest of the hold — the way a real
+            // finger wobbles and settles. (MOVE events do not advance the
+            // scheduler clock, so the full hold still has to be idled.)
+            long t = now;
+            for (int i = 1; i <= 2; i++) {
+                t = now + i * (hold / 5);
+                float drift = (i % 2 == 0 ? -1 : 1) * (slop + 10);
+                target.dispatchTouchEvent(android.view.MotionEvent.obtain(now, t,
+                        android.view.MotionEvent.ACTION_MOVE, x + drift, y + drift, 0));
+            }
+            idle(hold);
+            target.dispatchTouchEvent(android.view.MotionEvent.obtain(now, now + hold,
+                    android.view.MotionEvent.ACTION_UP, x, y, 0));
+        });
+        idle();
+    }
+
+    /** Picks up a slot with a real long-press and drags it partway towards a
+     * neighbour, holding the touch down (no UP). The world remembers the
+     * picked view and the drag distance so dropSlot() can finish the gesture. */
+    public void pickUpSlot(int from, int towards) {
+        scenario.onActivity(a -> {
+            android.widget.LinearLayout home = (android.widget.LinearLayout) a.findViewById(R.id.HomeScreen);
+            View target = home.getChildAt(from);
+            int slotHeight = target.getHeight() > 0 ? target.getHeight() : 90;
+            int hold = android.view.ViewConfiguration.getLongPressTimeout() + 150;
+            long now = android.os.SystemClock.uptimeMillis();
+            pickedSlotX = target.getWidth() / 2f;
+            float startY = target.getHeight() / 2f;
+            pickedSlotDy = slotHeight * (towards - from) * 0.6f;
+            target.dispatchTouchEvent(android.view.MotionEvent.obtain(now, now,
+                    android.view.MotionEvent.ACTION_DOWN, pickedSlotX, startY, 0));
+            idle(hold);
+            target.dispatchTouchEvent(android.view.MotionEvent.obtain(now, now + hold,
+                    android.view.MotionEvent.ACTION_MOVE, pickedSlotX, startY + pickedSlotDy, 0));
+            idle();
+            pickedSlotY = startY + pickedSlotDy;
+            pickedSlotView = target;
+        });
+        idle();
+    }
+
+    /** Finishes a pickUpSlot() gesture with an UP at the last dragged position. */
+    public void dropSlot() {
+        scenario.onActivity(a -> {
+            long now = android.os.SystemClock.uptimeMillis();
+            pickedSlotView.dispatchTouchEvent(android.view.MotionEvent.obtain(now, now,
+                    android.view.MotionEvent.ACTION_UP, pickedSlotX, pickedSlotY, 0));
+        });
+        idle();
+    }
+
+    /** True while a pickUpSlot() drag is held: the picked row must track the
+     * finger one to one instead of snapping between slots. */
+    public boolean pickedSlotFollowsFinger() {
+        boolean[] ok = {false};
+        scenario.onActivity(a -> ok[0] = Math.abs(pickedSlotView.getTranslationY() - pickedSlotDy) < 1f);
+        return ok[0];
     }
 
     public String storedSlotLabel(int slot) {

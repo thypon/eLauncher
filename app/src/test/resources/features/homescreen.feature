@@ -172,3 +172,23 @@ Feature: Home screen slots
     And the launcher is relaunched
     Then home slot 0 is labeled "Beta"
     And home slot 1 is labeled "Alpha"
+
+  Scenario: A drifting finger still opens the picker on long-press
+    Given the home screen has 2 slots configured
+    And the launcher is started
+    When I long-press home slot 0 with a drifting finger
+    Then the app picker shows Cancel left of "Add link"
+
+  Scenario: A picked-up slot settles only when released
+    Given the home screen has 3 slots configured
+    And home slot 0 is assigned to "Alpha"
+    And home slot 1 is assigned to "Beta"
+    And home slot 2 is assigned to "Gamma"
+    And the launcher is started
+    When I pick up home slot 0 and drag it towards slot 1
+    Then home slot 0 is labeled "Alpha"
+    And the picked slot follows the finger
+    When I drop it
+    Then home slot 0 is labeled "Beta"
+    And home slot 1 is labeled "Alpha"
+    And home slot 2 is labeled "Gamma"
