@@ -58,6 +58,8 @@ import java.util.TreeMap;
 public class MainActivity extends AppCompatActivity {
     private static final String NUMBER_OF_APPS = "number_of_apps_preference";
     private static final String LOCK_PORTRAIT = "lock_portrait_preference";
+    private static final float SLOT_TEXT_SIZE_DIP = 32f;
+    private static final int SLOT_INTERLINE_PX = 50;
 
     private ArrayList<App> appList;
     private EditText search;
@@ -483,8 +485,52 @@ public class MainActivity extends AppCompatActivity {
             homescreen.addView(textView);
         }
 
+        homescreen.post(() -> fitHomeScreenToListings(homescreen));
+
         new SwipeListener(homescreen);
 
+    }
+
+    /**
+     * Shrinks the slot text and interline spacing when the configured apps overflow
+     * the screen, until every listing is visible. Content that already fits is left
+     * untouched (scale 1). Runs once after the first layout pass gives the HomeScreen
+     * its real bounds.
+     */
+    private void fitHomeScreenToListings(LinearLayout homescreen) {
+        if (homescreen.getChildCount() == 0) {
+            return;
+        }
+        int available = homescreen.getHeight() > 0
+                ? homescreen.getHeight()
+                : homescreen.getResources().getDisplayMetrics().heightPixels;
+        int width = homescreen.getWidth() > 0
+                ? homescreen.getWidth()
+                : homescreen.getResources().getDisplayMetrics().widthPixels;
+        float scale = 1f;
+        int natural = 0;
+        for (int c = 0; c < homescreen.getChildCount(); c++) {
+            View child = homescreen.getChildAt(c);
+            child.measure(
+                    View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
+                    View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
+            natural += child.getMeasuredHeight();
+        }
+        if (natural > available) {
+            // Reserve one pixel per child for the per-line ceil() the framework
+            // applies when laying out at the smaller size, so the whole stack
+            // still fits once the scale is applied.
+            scale = Math.max((float) (available - homescreen.getChildCount()), 0) / natural;
+            if (scale <= 0f) {
+                scale = 0.01f;
+            }
+            for (int c = 0; c < homescreen.getChildCount(); c++) {
+                TextView slot = (TextView) homescreen.getChildAt(c);
+                slot.setTextSize(TypedValue.COMPLEX_UNIT_DIP, SLOT_TEXT_SIZE_DIP * scale);
+                slot.setPadding(0, 0, 0, (int) (SLOT_INTERLINE_PX * scale));
+            }
+        }
+        homescreen.requestLayout();
     }
 
     private void homeUpdateUsage() {
