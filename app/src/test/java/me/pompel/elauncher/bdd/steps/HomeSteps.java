@@ -92,4 +92,19 @@ public class HomeSteps {
         world.idle();
         assertNull("an unexpected launch intent was observed", world.nextStartedActivity());
     }
+
+    @Then("every home slot is visible on screen")
+    public void everyHomeSlotVisible() {
+        world.await(world::allHomeSlotsVisible);
+    }
+
+    @Then("the home slot text is scaled down")
+    public void slotTextScaledDown() {
+        assertTrue("slot text should shrink when the configured apps overflow the screen", world.homeSlotTextScaledDown());
+    }
+
+    @Then("the home slot text keeps its default size")
+    public void slotTextDefaultSize() {
+        assertTrue("slot text should keep its default size when everything fits", world.homeSlotTextDefaultSize());
+    }
 }

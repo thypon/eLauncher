@@ -860,6 +860,47 @@ public class LauncherWorld {
                 .getString(String.valueOf(slot), null);
     }
 
+    /** True once the slots' natural (unscaled-constraint) content height fits inside the
+     * display height, i.e. every listing is visible without scrolling. */
+    public boolean allHomeSlotsVisible() {
+        boolean[] ok = new boolean[1];
+        scenario.onActivity(a -> {
+            LinearLayout home = (LinearLayout) a.findViewById(R.id.HomeScreen);
+            int w = home.getWidth() > 0 ? home.getWidth() : a.getResources().getDisplayMetrics().widthPixels;
+            int h = a.getResources().getDisplayMetrics().heightPixels;
+            home.measure(View.MeasureSpec.makeMeasureSpec(w, View.MeasureSpec.EXACTLY),
+                    View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
+            int sum = 0;
+            for (int c = 0; c < home.getChildCount(); c++) sum += home.getChildAt(c).getMeasuredHeight();
+            ok[0] = sum <= h;
+        });
+        return ok[0];
+    }
+
+    /** True when slot 0's text size dropped below the 32dip default. */
+    public boolean homeSlotTextScaledDown() {
+        float[] size = new float[1];
+        float[] density = new float[1];
+        scenario.onActivity(a -> {
+            LinearLayout home = (LinearLayout) a.findViewById(R.id.HomeScreen);
+            size[0] = ((TextView) home.getChildAt(0)).getTextSize();
+            density[0] = a.getResources().getDisplayMetrics().density;
+        });
+        return size[0] < 32f * density[0];
+    }
+
+    /** True when slot 0's text size is still the 32dip default. */
+    public boolean homeSlotTextDefaultSize() {
+        float[] size = new float[1];
+        float[] density = new float[1];
+        scenario.onActivity(a -> {
+            LinearLayout home = (LinearLayout) a.findViewById(R.id.HomeScreen);
+            size[0] = ((TextView) home.getChildAt(0)).getTextSize();
+            density[0] = a.getResources().getDisplayMetrics().density;
+        });
+        return Math.abs(size[0] - 32f * density[0]) < 0.5f;
+    }
+
     public String storedSlotPackage(int slot) {
         return android.preference.PreferenceManager.getDefaultSharedPreferences(appContext())
                 .getString("p" + slot, null);

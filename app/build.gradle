@@ -62,6 +62,10 @@ android {
                 // classes (AppCompatDelegate active-delegate leaks); a fresh
                 // JVM per test class keeps them isolated
                 it.forkEvery = 1
+                // Real font metrics: the legacy renderer keeps line height
+                // constant regardless of text size, which makes any test that
+                // fits views by shrinking text impossible to verify.
+                it.systemProperty 'robolectric.graphicsMode', 'NATIVE'
             }
         }
     }

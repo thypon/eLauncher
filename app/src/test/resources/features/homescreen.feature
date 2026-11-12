@@ -128,3 +128,15 @@ Feature: Home screen slots
     And the launcher is started
     When I long-press home slot 0
     Then every app in the picker shows an icon
+
+  Scenario: Many apps shrink the slot text so every app stays visible
+    Given the home screen has 40 slots configured
+    And the launcher is started
+    Then every home slot is visible on screen
+    And the home slot text is scaled down
+
+  Scenario: Few apps keep the slot text at its default size
+    Given the home screen has 3 slots configured
+    And the launcher is started
+    Then every home slot is visible on screen
+    And the home slot text keeps its default size
