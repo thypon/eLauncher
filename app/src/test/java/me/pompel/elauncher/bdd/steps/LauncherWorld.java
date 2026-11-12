@@ -442,6 +442,8 @@ public class LauncherWorld {
     private float pickedSlotX;
     private float pickedSlotY;
     private float pickedSlotDy;
+    private int pickedSlotBaseTop;
+    private int pickedSlotHeight;
 
     /** Horizontal fling on the eBoard dashboard screen. Mirrors fling() on
      * the home screen: ~60px per 16ms, center start. Captures the activity
@@ -946,6 +948,8 @@ public class LauncherWorld {
             pickedSlotX = target.getWidth() / 2f;
             float startY = target.getHeight() / 2f;
             pickedSlotDy = slotHeight * (towards - from) * 0.6f;
+            pickedSlotBaseTop = target.getTop();
+            pickedSlotHeight = slotHeight;
             target.dispatchTouchEvent(android.view.MotionEvent.obtain(now, now,
                     android.view.MotionEvent.ACTION_DOWN, pickedSlotX, startY, 0));
             idle(hold);
@@ -954,6 +958,21 @@ public class LauncherWorld {
             idle();
             pickedSlotY = startY + pickedSlotDy;
             pickedSlotView = target;
+        });
+        idle();
+    }
+
+    /** Continues an in-flight pickUpSlot() drag with another MOVE further
+     * down, without releasing the finger. Proves the drag stream survives
+     * the live re-parenting of the rows. */
+    public void dragPickedSlotFurther() {
+        scenario.onActivity(a -> {
+            long now = android.os.SystemClock.uptimeMillis();
+            float further = pickedSlotHeight * 0.3f;
+            pickedSlotDy += further;
+            pickedSlotY += further;
+            pickedSlotView.dispatchTouchEvent(android.view.MotionEvent.obtain(now, now,
+                    android.view.MotionEvent.ACTION_MOVE, pickedSlotX, pickedSlotY, 0));
         });
         idle();
     }
@@ -968,11 +987,22 @@ public class LauncherWorld {
         idle();
     }
 
-    /** True while a pickUpSlot() drag is held: the picked row must track the
-     * finger one to one instead of snapping between slots. */
+    /** True while a pickUpSlot() drag is held: the picked row's visual top
+     * (layout top plus translation) must sit exactly where the finger put
+     * it, measured relative to where the row was picked up. A forced layout
+     * pass normalizes the tops after the live re-parenting. */
     public boolean pickedSlotFollowsFinger() {
         boolean[] ok = {false};
-        scenario.onActivity(a -> ok[0] = Math.abs(pickedSlotView.getTranslationY() - pickedSlotDy) < 1f);
+        scenario.onActivity(a -> {
+            android.widget.LinearLayout home = (android.widget.LinearLayout) a.findViewById(R.id.HomeScreen);
+            int w = home.getWidth() > 0 ? home.getWidth()
+                    : a.getResources().getDisplayMetrics().widthPixels;
+            home.measure(View.MeasureSpec.makeMeasureSpec(w, View.MeasureSpec.EXACTLY),
+                    View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
+            home.layout(0, 0, w, Math.max(home.getHeight(), home.getMeasuredHeight()));
+            float visualTop = pickedSlotView.getTop() + pickedSlotView.getTranslationY();
+            ok[0] = Math.abs(visualTop - (pickedSlotBaseTop + pickedSlotDy)) < 1f;
+        });
         return ok[0];
     }
 

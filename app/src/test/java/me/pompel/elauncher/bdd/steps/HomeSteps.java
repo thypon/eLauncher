@@ -133,6 +133,11 @@ public class HomeSteps {
         world.dropSlot();
     }
 
+    @When("I drag the picked slot a bit further")
+    public void iDragPickedSlotFurther() {
+        world.dragPickedSlotFurther();
+    }
+
     @Then("the picked slot follows the finger")
     public void pickedSlotFollowsFinger() {
         assertTrue("the picked slot should track the finger one to one while held",

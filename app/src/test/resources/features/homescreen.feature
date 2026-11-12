@@ -179,16 +179,21 @@ Feature: Home screen slots
     When I long-press home slot 0 with a drifting finger
     Then the app picker shows Cancel left of "Add link"
 
-  Scenario: A picked-up slot settles only when released
+  Scenario: A picked-up slot reorders live and keeps following the finger
     Given the home screen has 3 slots configured
     And home slot 0 is assigned to "Alpha"
     And home slot 1 is assigned to "Beta"
     And home slot 2 is assigned to "Gamma"
     And the launcher is started
     When I pick up home slot 0 and drag it towards slot 1
-    Then home slot 0 is labeled "Alpha"
+    Then home slot 0 is labeled "Beta"
+    And home slot 1 is labeled "Alpha"
     And the picked slot follows the finger
+    When I drag the picked slot a bit further
+    Then the picked slot follows the finger
+    And home slot 0 is labeled "Beta"
     When I drop it
     Then home slot 0 is labeled "Beta"
     And home slot 1 is labeled "Alpha"
+    And the assignment for slot 1 is stored with app "Alpha"
     And home slot 2 is labeled "Gamma"
