@@ -75,6 +75,54 @@ Feature: Home screen slots
     And I tap home slot 0
     Then the link brings the open browser forward
 
+  Scenario: A link slot is marked open after being tapped
+    Given the home screen has 2 slots configured
+    And the launcher is started
+    When I long-press home slot 0
+    And I press "Add link" in the dialog
+    And I name the link "Hacker News" at "https://news.ycombinator.com"
+    And I add the link
+    When I tap home slot 0
+    Then home slot 0 is marked open
+
+  Scenario: A link slot stays open across a restart inside the half hour
+    Given the home screen has 2 slots configured
+    And the launcher is started
+    When I long-press home slot 0
+    And I press "Add link" in the dialog
+    And I name the link "Hacker News" at "https://news.ycombinator.com"
+    And I add the link
+    When I tap home slot 0
+    And the launcher is relaunched
+    Then home slot 0 is marked open
+
+  Scenario: A link slot is no longer open after half an hour
+    Given the home screen has 2 slots configured
+    And the launcher is started
+    When I long-press home slot 0
+    And I press "Add link" in the dialog
+    And I name the link "Hacker News" at "https://news.ycombinator.com"
+    And I add the link
+    When I tap home slot 0
+    And half an hour passes
+    And the launcher is relaunched
+    Then home slot 0 is not marked open
+
+  Scenario: An app slot is marked open without usage access
+    Given the home screen has 2 slots configured
+    And home slot 0 is assigned to "Beta"
+    And the launcher is started
+    When I tap home slot 0
+    Then home slot 0 is marked open
+
+  Scenario: An app slot is not marked open when usage access is granted
+    Given the home screen has 2 slots configured
+    And home slot 0 is assigned to "Beta"
+    And usage access is granted
+    And the launcher is started
+    When I tap home slot 0
+    Then home slot 0 is not marked open
+
   Scenario: The slot picker shows an icon per app
     Given the home screen has 2 slots configured
     And the launcher is started

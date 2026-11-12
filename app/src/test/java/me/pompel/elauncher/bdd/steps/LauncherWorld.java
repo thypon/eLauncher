@@ -332,6 +332,12 @@ public class LauncherWorld {
         idle();
     }
 
+    /** Closes and relaunches the launcher: slots re-render on resume. */
+    public void relaunchLauncher() {
+        scenario.close();
+        startLauncher();
+    }
+
     public MainActivity activity() {
         MainActivity[] ref = new MainActivity[1];
         scenario.onActivity(a -> ref[0] = a);

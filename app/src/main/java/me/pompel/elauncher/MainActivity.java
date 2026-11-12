@@ -141,7 +141,7 @@ public class MainActivity extends AppCompatActivity {
                 if (view instanceof TextView) {
                     TextView textView = (TextView) view;
                     String packageName = prefs.getString("p" + textView.getTag(), "");
-                    if (activeProcessPackages.contains(packageName)) {
+                    if (activeProcessPackages.contains(packageName) || slotOpenRecently(textView)) {
                         SpannableString spannableAppName = new SpannableString(textView.getText());
                         spannableAppName.setSpan(new StyleSpan(Typeface.BOLD), 0, spannableAppName.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
                         textView.setText(spannableAppName);
@@ -177,6 +177,21 @@ public class MainActivity extends AppCompatActivity {
         Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(uri));
         intent.putExtra(Browser.EXTRA_APPLICATION_ID, getPackageName());
         return intent;
+    }
+
+    /** How long a slot stays marked as open after being used: links always
+     * (there is no usage-stats entry for them), and every app too when usage
+     * access is missing and the database cannot tell what is running. */
+    static final long OPEN_WINDOW_MS = 30 * 60 * 1000L;
+
+    private void markSlotOpen(View slot) {
+        prefs.edit()
+            .putLong("open_until_" + slot.getTag(), android.os.SystemClock.elapsedRealtime() + OPEN_WINDOW_MS)
+            .apply();
+    }
+
+    private boolean slotOpenRecently(View slot) {
+        return prefs.getLong("open_until_" + slot.getTag(), 0L) > android.os.SystemClock.elapsedRealtime();
     }
 
     private void safeStartActivity(Intent intent) {
@@ -440,6 +455,12 @@ public class MainActivity extends AppCompatActivity {
                 Intent intent = AppLink.isLink(value)
                     ? linkViewIntent(AppLink.decode(value).uri())
                     : getPackageManager().getLaunchIntentForPackage(value);
+                if (intent != null && (AppLink.isLink(value) || !hasUsageStatsPermission())) {
+                    // links have no usage-stats entry; without usage access the
+                    // database cannot tell what is running, so the slot marks
+                    // itself open (bold) for OPEN_WINDOW_MS either way
+                    markSlotOpen(textView);
+                }
                 openAppWithIntent(intent, true);
             });
             homescreen.addView(textView);
@@ -479,7 +500,7 @@ public class MainActivity extends AppCompatActivity {
             if (view instanceof TextView) {
                 TextView textView = (TextView) view;
                 String packageName = prefs.getString("p" + textView.getTag(), "");
-                if (activeProcessPackages.contains(packageName)) {
+                if (activeProcessPackages.contains(packageName) || slotOpenRecently(textView)) {
                     SpannableString spannableAppName = new SpannableString(textView.getText());
                     spannableAppName.setSpan(new StyleSpan(Typeface.BOLD), 0, spannableAppName.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
                     textView.setText(spannableAppName);
