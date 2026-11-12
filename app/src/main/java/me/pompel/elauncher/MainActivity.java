@@ -67,9 +67,10 @@ public class MainActivity extends AppCompatActivity {
     // Slot drag-to-reorder state (one touch gesture at a time)
     private boolean slotDragPending;
     private boolean slotDragging;
-    private float slotDownY;
+    private float slotDownRawY;
     private int slotOrigIndex;
     private int slotCurrentIndex;
+    private int slotDragBaseTop;
     private TextView slotDragView;
     private Runnable slotLongPressRunnable;
     private final java.util.List<String> slotLabels = new ArrayList<>();
@@ -488,7 +489,7 @@ public class MainActivity extends AppCompatActivity {
                     slotDragPending = false;
                     slotDragging = false;
                     slotDragView = null;
-                    slotDownY = ev.getY();
+                    slotDownRawY = ev.getRawY();
                     slotLongPressRunnable = () -> {
                         slotDragPending = true;
                         v.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS);
@@ -496,9 +497,8 @@ public class MainActivity extends AppCompatActivity {
                     v.postDelayed(slotLongPressRunnable, ViewConfiguration.getLongPressTimeout());
                     return false;
                 case MotionEvent.ACTION_MOVE: {
-                    float dy = ev.getY() - slotDownY;
                     if (slotDragging) {
-                        dragSlotTo((TextView) v, dy);
+                        dragSlotTo((TextView) v, ev);
                         return true;
                     }
                     if (slotDragPending) {
@@ -506,11 +506,12 @@ public class MainActivity extends AppCompatActivity {
                         slotDragView = (TextView) v;
                         slotOrigIndex = ((ViewGroup) v.getParent()).indexOfChild(v);
                         slotCurrentIndex = slotOrigIndex;
+                        slotDragBaseTop = v.getTop();
                         snapshotSlots();
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                             v.setElevation(getResources().getDisplayMetrics().density * 6);
                         }
-                        dragSlotTo((TextView) v, dy);
+                        dragSlotTo((TextView) v, ev);
                         return true;
                     }
                     // No touch-slop cancellation here: a real finger wobbles
@@ -542,44 +543,56 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
-    /** While held: the dragged row tracks the finger one to one (no snapping,
-     * no reordering) and the other rows slide out of its way visually.
-     * Nothing settles until the finger lifts. */
-    private void dragSlotTo(TextView dragged, float dy) {
-        int slotCount = prefs.getInt(NUMBER_OF_APPS, 8);
+    /** While held: the dragged row tracks the finger one to one, and whenever
+     * its center crosses into a neighbouring slot the rows genuinely reorder
+     * (the neighbour is re-parented around the held row, which animates into
+     * its new place). The held view itself is never removed from its parent —
+     * a view detached mid-gesture loses the touch stream, which is what made
+     * the drag drop after a single swap. */
+    private void dragSlotTo(TextView dragged, MotionEvent ev) {
         int slotHeight = dragged.getHeight() > 0 ? dragged.getHeight() : 1;
-        dragged.setTranslationY(dy);
+        int slotCount = prefs.getInt(NUMBER_OF_APPS, 8);
+        float desiredTop = slotDragBaseTop + (ev.getRawY() - slotDownRawY);
+        // the slot grid's origin: where slot 0 begins (the stack is gravity
+        // centered, so it does not start at y = 0)
+        float gridTop = slotDragBaseTop - slotOrigIndex * slotHeight;
         int target = Math.max(0, Math.min(slotCount - 1,
-                slotOrigIndex + Math.round(dy / slotHeight)));
-        if (target == slotCurrentIndex) {
-            return;
+                (int) Math.floor((desiredTop - gridTop + slotHeight / 2f) / slotHeight)));
+        LinearLayout home = (LinearLayout) dragged.getParent();
+        while (slotCurrentIndex < target) {
+            swapSlotWithNeighbour(home, 1);
+            slotCurrentIndex++;
         }
-        shiftOtherRows((LinearLayout) dragged.getParent(), target);
-        slotCurrentIndex = target;
+        while (slotCurrentIndex > target) {
+            swapSlotWithNeighbour(home, -1);
+            slotCurrentIndex--;
+        }
+        float expectedTop = slotDragBaseTop + (slotCurrentIndex - slotOrigIndex) * slotHeight;
+        dragged.setTranslationY(desiredTop - expectedTop);
     }
 
-    /** Slides the rows between the picked-up row's origin and its current
-     * hover position out of the way (translation only; the stack order and
-     * the backing data are untouched until the drop). */
-    private void shiftOtherRows(LinearLayout home, int target) {
+    /** Moves the neighbour across the held row so the stack order genuinely
+     * changes mid-drag, animating the neighbour into its new slot. The held
+     * row keeps its place in the parent, so the touch stream stays alive. */
+    private void swapSlotWithNeighbour(LinearLayout home, int direction) {
         int slotCount = prefs.getInt(NUMBER_OF_APPS, 8);
-        float draggedHeight = slotDragView.getHeight() > 0 ? slotDragView.getHeight() : 1;
-        long duration = animationsEnabled() ? 150 : 0;
-        for (int i = 0; i < slotCount; i++) {
-            TextView row = (TextView) home.getChildAt(i);
-            if (row == slotDragView) {
-                continue;
-            }
-            float shift = 0;
-            if (target > slotOrigIndex && i > slotOrigIndex && i <= target) {
-                shift = -draggedHeight;
-            } else if (target < slotOrigIndex && i >= target && i < slotOrigIndex) {
-                shift = draggedHeight;
-            }
-            if (Math.abs(row.getTranslationY() - shift) > 0.5f) {
-                row.animate().translationY(shift).setDuration(duration).start();
-            }
+        int heldIndex = home.indexOfChild(slotDragView);
+        int neighbourIndex = heldIndex + direction;
+        if (neighbourIndex < 0 || neighbourIndex >= slotCount) {
+            return;
         }
+        TextView neighbour = (TextView) home.getChildAt(neighbourIndex);
+        if (neighbour == null) {
+            return;
+        }
+        long duration = animationsEnabled() ? 150 : 0;
+        int slotHeight = slotDragView.getHeight() > 0 ? slotDragView.getHeight() : 1;
+        home.removeView(neighbour);
+        home.addView(neighbour, heldIndex);
+        neighbour.setTranslationY(direction * slotHeight);
+        neighbour.animate().translationY(0).setDuration(duration).start();
+        slotLabels.add(heldIndex + direction, slotLabels.remove(heldIndex));
+        slotPackages.add(heldIndex + direction, slotPackages.remove(heldIndex));
     }
 
     /** Copies the current slot labels/packages into the drag state. */
@@ -605,34 +618,15 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    /** Drops the dragged row: settles it at the hover position (the only
-     * moment the stack order changes), clears the drag visuals, and persists
-     * the new order into the slot preferences. */
+    /** Drops the dragged row: the stack already holds the final order (the
+     * rows re-parented live during the drag), so the drop only settles the
+     * residual translation of the held row and persists the order. */
     private void endSlotDrag() {
         slotDragging = false;
         LinearLayout home = (LinearLayout) slotDragView.getParent();
-        int finalIndex = slotCurrentIndex;
-        int oldTop = slotDragView.getTop();
-        int slotHeight = slotDragView.getHeight() > 0 ? slotDragView.getHeight() : 1;
-        float trackedDy = slotDragView.getTranslationY();
-        home.removeView(slotDragView);
-        home.addView(slotDragView, finalIndex);
-        String label = slotLabels.remove(slotOrigIndex);
-        String pkg = slotPackages.remove(slotOrigIndex);
-        slotLabels.add(finalIndex, label);
-        slotPackages.add(finalIndex, pkg);
-        for (int i = 0; i < home.getChildCount(); i++) {
-            View child = home.getChildAt(i);
-            child.animate().cancel();
-            child.setTranslationY(0);
-        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             slotDragView.setElevation(0);
         }
-        // settle the picked row from where the finger held it onto the slot,
-        // instead of snapping the residual half-row
-        float settle = trackedDy - (finalIndex - slotOrigIndex) * slotHeight;
-        slotDragView.setTranslationY(settle);
         slotDragView.animate().translationY(0)
                 .setDuration(animationsEnabled() ? 150 : 0).start();
         rebindSlots(home);
