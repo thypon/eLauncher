@@ -6,6 +6,7 @@ import io.cucumber.java.en.When;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 
 public class HomeSteps {
     private final LauncherWorld world;
@@ -48,6 +49,26 @@ public class HomeSteps {
     @When("I tap home slot {int}")
     public void iTapSlot(int slot) {
         world.clickSlot(slot);
+    }
+
+    @When("the launcher is relaunched")
+    public void relaunchLauncher() {
+        world.relaunchLauncher();
+    }
+
+    @When("half an hour passes")
+    public void halfAnHourPasses() {
+        world.idle(31 * 60 * 1000L);
+    }
+
+    @Then("home slot {int} is marked open")
+    public void slotMarkedOpen(int slot) {
+        assertTrue("home slot " + slot + " should be marked open", world.slotTextIsBold(slot));
+    }
+
+    @Then("home slot {int} is not marked open")
+    public void slotNotMarkedOpen(int slot) {
+        assertTrue("home slot " + slot + " should not be marked open", !world.slotTextIsBold(slot));
     }
 
     @Then("the home screen shows {int} slots")
