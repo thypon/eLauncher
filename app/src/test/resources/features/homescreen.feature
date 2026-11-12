@@ -64,6 +64,17 @@ Feature: Home screen slots
     When I tap home slot 0
     Then the link address opens
 
+  Scenario: Tapping a link slot again brings the open browser forward
+    Given the home screen has 2 slots configured
+    And the launcher is started
+    When I long-press home slot 0
+    And I press "Add link" in the dialog
+    And I name the link "Hacker News" at "https://news.ycombinator.com"
+    And I add the link
+    When I tap home slot 0
+    And I tap home slot 0
+    Then the link brings the open browser forward
+
   Scenario: The slot picker shows an icon per app
     Given the home screen has 2 slots configured
     And the launcher is started

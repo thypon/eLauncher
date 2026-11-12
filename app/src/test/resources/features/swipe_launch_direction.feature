@@ -37,3 +37,8 @@ Feature: Directional swipe launch animation
     Given the link "Hacker News" at "https://news.ycombinator.com" is assigned to the left gesture
     When I fling right on the home screen
     Then the link address opens
+
+  Scenario: A link gesture reuses the already open browser window
+    Given the link "Hacker News" at "https://news.ycombinator.com" is assigned to the right gesture
+    When I fling left on the home screen
+    Then the link brings the open browser forward

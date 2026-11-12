@@ -15,6 +15,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
+import android.provider.Browser;
 import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
@@ -165,6 +166,17 @@ public class MainActivity extends AppCompatActivity {
         search.setText("");
         safeStartActivity(intent);
         if (change) changeLayout(true, false);
+    }
+
+    /** ACTION_VIEW intent for a stored link. Browser.EXTRA_APPLICATION_ID
+     * tells Chrome to reuse the tab the launcher already opened (and navigate
+     * it to the link), instead of stacking a new tab on every tap — on
+     * e-ink, both a tab switch and a reload are slow. Browsers without
+     * support ignore the extra and open a new tab. */
+    private Intent linkViewIntent(String uri) {
+        Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(uri));
+        intent.putExtra(Browser.EXTRA_APPLICATION_ID, getPackageName());
+        return intent;
     }
 
     private void safeStartActivity(Intent intent) {
@@ -426,7 +438,7 @@ public class MainActivity extends AppCompatActivity {
             textView.setOnClickListener(v -> {
                 String value = prefs.getString("p" + textView.getTag(), "");
                 Intent intent = AppLink.isLink(value)
-                    ? new Intent(Intent.ACTION_VIEW, Uri.parse(AppLink.decode(value).uri()))
+                    ? linkViewIntent(AppLink.decode(value).uri())
                     : getPackageManager().getLaunchIntentForPackage(value);
                 openAppWithIntent(intent, true);
             });
@@ -604,7 +616,7 @@ public class MainActivity extends AppCompatActivity {
         if (AppLink.isLink(pkg)) {
             // a link target goes through the system's URI handler (browser,
             // store app, ...) with the same directional animation
-            safeStartActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(AppLink.decode(pkg).uri())));
+            safeStartActivity(linkViewIntent(AppLink.decode(pkg).uri()));
             return;
         }
         Intent intent = getPackageManager().getLaunchIntentForPackage(pkg);
