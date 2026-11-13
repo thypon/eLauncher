@@ -1,0 +1,31 @@
+# F-Droid repository configuration for the eLauncher binary repo served on
+# GitHub Pages: https://thypon.github.io/eLauncher/fdroid/repo
+#
+# Secrets (repo index keystore, its passwords) come from GitHub Actions
+# environment variables and are injected by .github/workflows/fdroid-repo.yml.
+# This file contains no secret values.
+
+# Canonical URL — must end in /repo (fdroidserver standardwebroot check).
+repo_url: https://thypon.github.io/eLauncher/fdroid/repo
+repo_name: eLauncher
+repo_description: >-
+  Current build of eLauncher from master. eLauncher is an extremely
+  lightweight and minimal launcher for Android, tailored for eInk devices.
+
+# Single-app binary repo of master builds; no archive repository.
+archive_older: 0
+
+# Do not advertise an index age limit to clients; the weekly cron rebuild keeps
+# the index fresh well inside what the F-Droid client accepts.
+repo_maxage: 0
+
+# Repo index signing key. `fdroid init`-generated keystore, stored in the
+# FDROID_KEYSTORE_BASE64 Actions secret; both passwords are the same value.
+repo_keyalias: fdroidrepo
+keystore: keystore.jks
+keystorepass: {env: FDROID_KEYSTORE_PASS}
+keypass: {env: FDROID_KEYSTORE_PASS}
+keydname: CN=eLauncher Repo, OU=eLauncher, O=thypon, L=Internet, ST=Internet, C=US
+
+# APKs are placed here by the workflow; fdroid update scans this directory.
+# App metadata lives in metadata/me.pompel.elauncher.yml.
