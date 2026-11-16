@@ -24,7 +24,7 @@ jobs:
       # ubuntu-latest images ship ANDROID_HOME preinstalled with common platforms/build-tools.
 
       - name: Set up Gradle cache
-        uses: gradle/actions/setup-gradle@v4 # 42ebad84b0585498c0413b0967cf4e80ec0e1d19
+        uses: gradle/actions/setup-gradle@748248ddd2a24f49513d8f472f81c3a07d4d50e1 # v4.4.4ebad84b0585498c0413b0967cf4e80ec0e1d19
 
       # Runs all Cucumber/Robolectric scenarios, unit tests, lint (non-aborting)
       # and the JaCoCo line-coverage gate (minimum 80%).
