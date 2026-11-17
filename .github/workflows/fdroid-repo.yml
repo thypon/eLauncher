@@ -4,6 +4,12 @@ name: F-Droid repo
 # repository on the orphan branch `fdroid-repo`, and deploys it to GitHub
 # Pages: https://thypon.github.io/eLauncher/fdroid/repo
 #
+# The same build is also published as a GitHub release with the same version
+# scheme: tag v<versionName> (e.g. v2.2.34), APK attached as asset. Old
+# auto-releases are pruned to the 30 newest, mirroring the F-Droid repo's
+# APK retention. Stable base tags (v1.0, v2.2, ...) and their historic
+# releases are never touched - the version computation depends on them.
+#
 # Users add the repo in the F-Droid client as:
 #   https://thypon.github.io/eLauncher/fdroid/repo?fingerprint=<SHA256 of the
 #   repo signing certificate, printed in the workflow summary of every run>
@@ -46,7 +52,11 @@ jobs:
       - name: Compute version from tags
         id: version
         run: |
-          TAG=$(git describe --tags --match 'v*.*' --abbrev=0)
+          # Only the stable two-component tags (v2.2) drive versioning. The
+          # auto-release tags published below (v2.2.N) share the v*.* prefix;
+          # a plain `git describe --match 'v*.*'` would pick them up and break
+          # the MAJOR/MINOR split, so filter by exact shape instead.
+          TAG=$(git tag --merged HEAD | grep -E '^v[0-9]+\.[0-9]+$' | sort -V | tail -n1)
           VER=${TAG#v}
           MAJOR=${VER%%.*}
           MINOR=${VER#*.}
@@ -162,6 +172,80 @@ jobs:
           # from FETCH_HEAD), so every push replaces the ref entirely.
           git push -q --force origin fdroid-repo
           echo "changed=true" >> "$GITHUB_OUTPUT"
+
+      # Publish the same build as a GitHub release, same version scheme as the
+      # F-Droid repo: tag v<versionName> (e.g. v2.2.34). Notes list every
+      # commit (title + description) since the previous release. Idempotent:
+      # skipped when the release already exists (weekly no-change runs).
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          VERSION_NAME: ${{ steps.version.outputs.version_name }}
+          VERSION_CODE: ${{ steps.version.outputs.version_code }}
+        run: |
+          TAG="v${VERSION_NAME}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release ${TAG} already exists; skipping."
+            exit 0
+          fi
+          # Changelog range: commits since the previous auto-release tag
+          # (v2.2.N); for the first auto-release, since the stable base tag.
+          PREV=$(git tag --merged HEAD | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n1)
+          if [ -n "$PREV" ]; then
+            RANGE="${PREV}..HEAD"
+          else
+            RANGE="${{ steps.version.outputs.tag }}..HEAD"
+          fi
+          echo "Changelog range: ${RANGE}"
+          # Title as bold bullet, description indented below it. \036 (ASCII
+          # record separator) keeps multiline commit bodies intact through the
+          # awk record split.
+          SEP=$(printf '\036')
+          CHANGELOG=$(git log "${RANGE}" --no-merges --pretty=format:"${SEP}%s%n%b" \
+            | awk -v RS="$SEP" '
+              NR == 1 { next }
+              {
+                idx = index($0, "\n")
+                if (idx == 0) { subj = $0; body = "" }
+                else { subj = substr($0, 1, idx - 1); body = substr($0, idx + 1) }
+                out = out "- **" subj "**\n"
+                n = split(body, lines, "\n")
+                while (n > 0 && lines[n] == "") n--
+                for (i = 1; i <= n; i++) out = out (lines[i] == "" ? "" : "  " lines[i]) "\n"
+                out = out "\n"
+              }
+              END { printf "%s", out }')
+          {
+            echo "versionCode ${VERSION_CODE} - same build as published in the F-Droid repo (me.pompel.elauncher_${VERSION_CODE}.apk)"
+            if [ -n "$CHANGELOG" ]; then
+              echo ""
+              echo "## Changes"
+              echo ""
+              printf '%s\n' "$CHANGELOG"
+            fi
+          } > "$RUNNER_TEMP/release-notes.md"
+          cp "$RUNNER_TEMP/eLauncher.apk" "$RUNNER_TEMP/eLauncher-${VERSION_NAME}.apk"
+          gh release create "$TAG" "$RUNNER_TEMP/eLauncher-${VERSION_NAME}.apk" \
+            --target "$GITHUB_SHA" \
+            --title "${VERSION_NAME}" \
+            --notes-file "$RUNNER_TEMP/release-notes.md"
+
+      # Mirror the F-Droid repo retention (30 newest APKs): drop auto-releases
+      # beyond the 30 newest. Only tags matching the auto-release scheme
+      # (v2.2.N) are candidates; stable base tags are never touched.
+      - name: Prune old GitHub releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh api "repos/${{ github.repository }}/releases?per_page=100" --paginate \
+            --jq '.[] | select(.tag_name | test("^v[0-9]+\\.[0-9]+\\.[0-9]+$")) | [.created_at, .tag_name] | @tsv' \
+            | sort -r | tail -n +31 | cut -f2 \
+            | while read -r tag; do
+                echo "Deleting old release ${tag}"
+                gh release delete "$tag" --yes --cleanup-tag
+              done
 
       - name: Stage Pages artifact
         if: steps.commit.outputs.changed == 'true' || github.event_name == 'workflow_dispatch'
