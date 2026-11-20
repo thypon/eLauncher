@@ -86,6 +86,12 @@ public class HomeSteps {
         assertEquals("com.fixtures." + packageName.toLowerCase(), world.storedSlotPackage(slot));
     }
 
+    @Then("the assignment for slot {int} is cleared")
+    public void assignmentCleared(int slot) {
+        assertNull("slot label pref must be cleared", world.storedSlotLabel(slot));
+        assertNull("slot package pref must be cleared", world.storedSlotPackage(slot));
+    }
+
     @Then("no app was launched")
     public void noAppLaunched() {
         try { Thread.sleep(300); } catch (InterruptedException ignored) { }
