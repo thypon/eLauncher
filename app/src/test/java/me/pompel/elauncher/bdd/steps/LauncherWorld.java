@@ -114,7 +114,6 @@ public class LauncherWorld {
      * and the package is not registered). Clears prior com.fixtures.* entries first, because the
      * underlying shadow maps are static and may leak across scenarios. */
     public void installApps(String... labels) {
-        android.content.pm.PackageManager pm = appContext().getPackageManager();
         // defensive cleanup: drop fixtures from previous scenarios (shadow maps are static)
         try {
             java.lang.reflect.Field f = org.robolectric.shadows.ShadowPackageManager.class
@@ -129,39 +128,78 @@ public class LauncherWorld {
             throw new RuntimeException(e);
         }
         for (String label : labels) {
-            String pkg = "com.fixtures." + label.toLowerCase();
-            shadowOf(pm).removePackage(pkg); // no-op if absent
-            android.content.pm.PackageInfo pi = new android.content.pm.PackageInfo();
-            pi.packageName = pkg;
-            pi.versionCode = 1;
-            pi.versionName = "1.0";
-            pi.applicationInfo = new android.content.pm.ApplicationInfo();
-            pi.applicationInfo.packageName = pkg;
-            pi.applicationInfo.nonLocalizedLabel = label;
-            // real launcher apps always ship an icon; give the fixture the framework
-            // default so icon-related flows (e.g. the gesture picker) behave like reality
-            pi.applicationInfo.icon = android.R.drawable.sym_def_app_icon;
-            pi.activities = new android.content.pm.ActivityInfo[1];
-            pi.activities[0] = new android.content.pm.ActivityInfo();
-            pi.activities[0].packageName = pkg;
-            pi.activities[0].name = pkg + ".MainActivity";
-            pi.activities[0].applicationInfo = pi.applicationInfo;
-            pi.activities[0].nonLocalizedLabel = label;
-            shadowOf(pm).addPackage(pi);
-            android.content.ComponentName cn = new android.content.ComponentName(pkg, pkg + ".MainActivity");
-            android.content.pm.ActivityInfo added = shadowOf(pm).addActivityIfNotPresent(cn);
-            added.applicationInfo = pi.applicationInfo;
-            added.nonLocalizedLabel = label;
-            android.content.IntentFilter filter = new android.content.IntentFilter(Intent.ACTION_MAIN);
-            filter.addCategory(Intent.CATEGORY_LAUNCHER);
-            filter.addCategory(Intent.CATEGORY_DEFAULT);
-            addActivityFilter(cn, filter);
-            // the shadow PackageManager only returns icons registered through
-            // setApplicationIcon; mirror a real app's launcher icon here
-            shadowOf(pm).setApplicationIcon(pkg, new android.graphics.drawable.ColorDrawable(android.graphics.Color.LTGRAY));
+            installApp(label);
         }
         // the launcher's own icon backs the eBoard entry in the gesture picker
-        shadowOf(pm).setApplicationIcon(appContext().getPackageName(), new android.graphics.drawable.ColorDrawable(android.graphics.Color.DKGRAY));
+        shadowOf(pm()).setApplicationIcon(appContext().getPackageName(), new android.graphics.drawable.ColorDrawable(android.graphics.Color.DKGRAY));
+    }
+
+    /** Installs a single fixture app WITHOUT the cleanup pass (used by the
+     * "X is installed" step so apps installed by the Background stay). */
+    public void installApp(String label) {
+        android.content.pm.PackageManager pm = pm();
+        String pkg = pkgFor(label);
+        shadowOf(pm).removePackage(pkg); // no-op if absent
+        android.content.pm.PackageInfo pi = new android.content.pm.PackageInfo();
+        pi.packageName = pkg;
+        pi.versionCode = 1;
+        pi.versionName = "1.0";
+        pi.applicationInfo = new android.content.pm.ApplicationInfo();
+        pi.applicationInfo.packageName = pkg;
+        pi.applicationInfo.nonLocalizedLabel = label;
+        // real launcher apps always ship an icon; give the fixture the framework
+        // default so icon-related flows (e.g. the gesture picker) behave like reality
+        pi.applicationInfo.icon = android.R.drawable.sym_def_app_icon;
+        pi.activities = new android.content.pm.ActivityInfo[1];
+        pi.activities[0] = new android.content.pm.ActivityInfo();
+        pi.activities[0].packageName = pkg;
+        pi.activities[0].name = pkg + ".MainActivity";
+        pi.activities[0].applicationInfo = pi.applicationInfo;
+        pi.activities[0].nonLocalizedLabel = label;
+        shadowOf(pm).addPackage(pi);
+        android.content.ComponentName cn = new android.content.ComponentName(pkg, pkg + ".MainActivity");
+        android.content.pm.ActivityInfo added = shadowOf(pm).addActivityIfNotPresent(cn);
+        added.applicationInfo = pi.applicationInfo;
+        added.nonLocalizedLabel = label;
+        android.content.IntentFilter filter = new android.content.IntentFilter(Intent.ACTION_MAIN);
+        filter.addCategory(Intent.CATEGORY_LAUNCHER);
+        filter.addCategory(Intent.CATEGORY_DEFAULT);
+        addActivityFilter(cn, filter);
+        // the shadow PackageManager only returns icons registered through
+        // setApplicationIcon; mirror a real app's launcher icon here
+        shadowOf(pm).setApplicationIcon(pkg, new android.graphics.drawable.ColorDrawable(android.graphics.Color.LTGRAY));
+    }
+
+    private android.content.pm.PackageManager pm() {
+        return appContext().getPackageManager();
+    }
+
+    /** Removes a fixture app from the shadow package manager. removePackage does not
+     * clear the static activityFilters map, so the launcher filter is dropped too. */
+    public void uninstallPackage(String label) {
+        String pkg = pkgFor(label);
+        shadowOf(pm()).removePackage(pkg);
+        try {
+            java.lang.reflect.Field f = org.robolectric.shadows.ShadowPackageManager.class
+                    .getDeclaredField("activityFilters");
+            f.setAccessible(true);
+            @SuppressWarnings("unchecked")
+            java.util.SortedMap<android.content.ComponentName, java.util.List<android.content.IntentFilter>> filters =
+                    (java.util.SortedMap<android.content.ComponentName, java.util.List<android.content.IntentFilter>>) f.get(null);
+            filters.keySet().removeIf(cn -> cn != null && pkg.equals(cn.getPackageName()));
+        } catch (ReflectiveOperationException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    /** Delivers a package change system broadcast the way the OS would. */
+    public void broadcastPackageChange(String action, String pkg, boolean replacing) {
+        Intent intent = new Intent(action, android.net.Uri.parse("package:" + pkg));
+        if (replacing) {
+            intent.putExtra(android.content.Intent.EXTRA_REPLACING, true);
+        }
+        appContext().sendBroadcast(intent);
+        idle();
     }
 
     public static String pkgFor(String label) {
@@ -1373,6 +1411,32 @@ public class LauncherWorld {
         shadowOf(dashboard()).receiveResult(req.intent, android.app.Activity.RESULT_OK,
                 new Intent());
         idle();
+    }
+
+    /** Registers a fake widget provider belonging to a foreign fixture package, so
+     * uninstalling that package must drop the widgets bound from its provider. */
+    public void installWidgetProviderForPackage(String pkg, String label) {
+        widgetProvider = new android.content.ComponentName(pkg, pkg + ".WidgetProvider");
+        android.appwidget.AppWidgetProviderInfo info = new android.appwidget.AppWidgetProviderInfo();
+        info.provider = widgetProvider;
+        info.label = label;
+        // providerInfo backs loadLabel(): a bare ActivityInfo with a
+        // non-localized label keeps the popover title deterministic
+        android.content.pm.ActivityInfo ai = new android.content.pm.ActivityInfo();
+        ai.packageName = pkg;
+        ai.nonLocalizedLabel = label;
+        try {
+            java.lang.reflect.Field f = android.appwidget.AppWidgetProviderInfo.class.getField("providerInfo");
+            f.set(info, ai);
+        } catch (Exception ignored) {
+        }
+        shadowOf(widgetManager()).addInstalledProvider(info);
+    }
+
+    /** Binds a widget of the last installed provider and remembers its id in the board store. */
+    public void seedBoundWidget(int id) {
+        shadowOf(widgetManager()).bindAppWidgetId(id, widgetProvider);
+        seedBoardIds(id);
     }
 
     public boolean addWidgetButtonVisible() {

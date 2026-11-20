@@ -37,6 +37,35 @@ public class LauncherSteps {
         assertTrue(world.drawerOpen());
     }
 
+    @When("{string} is installed")
+    public void appIsInstalled(String label) {
+        world.installApp(label);
+        world.broadcastPackageChange(Intent.ACTION_PACKAGE_ADDED, LauncherWorld.pkgFor(label), false);
+    }
+
+    @When("{string} is uninstalled")
+    public void appIsUninstalled(String label) {
+        world.uninstallPackage(label);
+        world.broadcastPackageChange(Intent.ACTION_PACKAGE_REMOVED, LauncherWorld.pkgFor(label), false);
+    }
+
+    @When("{string} is updated")
+    public void appIsUpdated(String label) {
+        // the OS fires REMOVED (with EXTRA_REPLACING) followed by REPLACED on update
+        world.broadcastPackageChange(Intent.ACTION_PACKAGE_REMOVED, LauncherWorld.pkgFor(label), true);
+        world.broadcastPackageChange(Intent.ACTION_PACKAGE_REPLACED, LauncherWorld.pkgFor(label), true);
+    }
+
+    @Then("{string} appears in the drawer")
+    public void appAppearsInDrawer(String label) {
+        assertTrue(label + " must be listed in the drawer", world.drawerLabels().contains(label));
+    }
+
+    @Then("{string} does not appear in the drawer")
+    public void appDoesNotAppearInDrawer(String label) {
+        assertTrue(label + " must not be listed in the drawer", !world.drawerLabels().contains(label));
+    }
+
     @Then("{string} appears before {string} in the drawer")
     public void appAppearsBefore(String first, String second) {
         assertTrue("drawer must list " + first + " before " + second,

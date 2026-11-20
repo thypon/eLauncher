@@ -33,6 +33,17 @@ public class DashboardSteps {
         world.installWidgetProvider(label, description);
     }
 
+    @Given("a widget provider app {string} is installed")
+    public void widgetProviderAppInstalled(String label) {
+        world.installApps(label);
+        world.installWidgetProviderForPackage(LauncherWorld.pkgFor(label), label);
+    }
+
+    @Given("a widget of that provider is on the board")
+    public void widgetOfThatProviderOnBoard() {
+        world.seedBoundWidget(21);
+    }
+
     @Given("binding widgets is allowed")
     public void bindingWidgetsAllowed() {
         world.allowWidgetBinding(true);

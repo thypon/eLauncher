@@ -574,6 +574,24 @@ public class DashboardActivity extends AppCompatActivity {
         rebuildBoard();
     }
 
+    /** Drops every board widget whose provider belonged to the given package and
+     * releases the appWidgetIds. Runs while the eBoard is closed (package broadcast
+     * from MainActivity), so it works on its own WidgetHost/WidgetPrefs pair. */
+    public static void removeWidgetsOfPackage(Context context, String packageName) {
+        AppWidgetManager widgets = AppWidgetManager.getInstance(context);
+        WidgetHost host = new WidgetHost(context);
+        WidgetPrefs store = new WidgetPrefs(
+                context.getSharedPreferences(WidgetPrefs.PREFS_FILE, Context.MODE_PRIVATE));
+        for (int id : store.ids()) {
+            AppWidgetProviderInfo info = widgets.getAppWidgetInfo(id);
+            if (info == null || (info.provider != null
+                    && packageName.equals(info.provider.getPackageName()))) {
+                host.deleteAppWidgetId(id);
+                store.remove(id);
+            }
+        }
+    }
+
     // ---- drag-to-reorder (Olauncher's drag after long press) --------------------------------
 
     /** Moves the dragged row under the finger, swapping it past neighbor rows

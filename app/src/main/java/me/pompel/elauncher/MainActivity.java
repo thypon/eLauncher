@@ -10,6 +10,7 @@ import android.app.AppOpsManager;
 import android.app.AlertDialog;
 import android.app.usage.UsageStats;
 import android.app.usage.UsageStatsManager;
+import android.content.BroadcastReceiver;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.content.Intent;
@@ -133,7 +134,10 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void changeLayout(boolean home, boolean animated) {
-        if (!home) loadApps();
+        if (!home) {
+            loadApps();
+            if (adapter != null) adapter.notifyDataSetChanged();
+        }
         keyboardAction(home);
         if (animated && animationsEnabled()) {
             Transition transition = new Fade();
@@ -472,6 +476,69 @@ public class MainActivity extends AppCompatActivity {
 
         new SwipeListener(homescreen);
 
+        // Package changes reach the launcher as system broadcasts; re-query the
+        // package manager so the drawer, the home slots and the eBoard react
+        // immediately instead of after the next relaunch.
+        IntentFilter packageChanges = new IntentFilter();
+        packageChanges.addAction(Intent.ACTION_PACKAGE_ADDED);
+        packageChanges.addAction(Intent.ACTION_PACKAGE_REMOVED);
+        packageChanges.addAction(Intent.ACTION_PACKAGE_REPLACED);
+        packageChanges.addDataScheme("package");
+        registerReceiver(packageChangeReceiver, packageChanges);
+
+    }
+
+    /** Reacts to install/uninstall/update broadcasts. An update fires REMOVED
+     * (with EXTRA_REPLACING) followed by REPLACED; only the final REPLACED
+     * refreshes, otherwise the drawer would flicker mid-update. */
+    private final BroadcastReceiver packageChangeReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            String action = intent.getAction();
+            if (action == null) return;
+            boolean removed = Intent.ACTION_PACKAGE_REMOVED.equals(action);
+            boolean replacing = intent.getBooleanExtra(Intent.EXTRA_REPLACING, false);
+            if (removed && replacing) return; // transient state of an update
+            loadApps();
+            adapter.notifyDataSetChanged();
+            String pkg = intent.getData() != null ? intent.getData().getSchemeSpecificPart() : null;
+            if (removed && pkg != null && !pkg.isEmpty()) {
+                DashboardActivity.removeWidgetsOfPackage(context, pkg);
+                resetHomescreenLinks(pkg);
+            }
+        }
+    };
+
+    /** Home slots pointing at an uninstalled package fall back to the default
+     * "App" placeholder and their assignment is cleared from the prefs. The
+     * view text is checked too: the prefs may already be cleared by another
+     * registered launcher instance's receiver (single process, stale hosts). */
+    private void resetHomescreenLinks(String pkg) {
+        LinearLayout homescreen = findViewById(R.id.HomeScreen);
+        SharedPreferences.Editor editor = prefs.edit();
+        boolean changed = false;
+        int count = prefs.getInt(NUMBER_OF_APPS, 8);
+        for (int i = 0; i < count; i++) {
+            String assigned = prefs.getString("p" + i, null);
+            View slot = homescreen != null && i < homescreen.getChildCount()
+                    ? homescreen.getChildAt(i) : null;
+            boolean prefsMatch = pkg.equals(assigned);
+            boolean orphanSlot = slot instanceof TextView && assigned == null
+                    && !"App".equals(((TextView) slot).getText().toString());
+            if (!prefsMatch && !orphanSlot) continue;
+            editor.remove(String.valueOf(i)).remove("p" + i);
+            changed = true;
+            if (slot instanceof TextView) {
+                ((TextView) slot).setText("App");
+            }
+        }
+        if (changed) editor.apply();
+    }
+
+    @Override
+    protected void onDestroy() {
+        unregisterReceiver(packageChangeReceiver);
+        super.onDestroy();
     }
 
     /**
