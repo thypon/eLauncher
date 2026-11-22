@@ -81,4 +81,41 @@ public class WidgetBoardSteps {
     public void dragWidgetRowDown() {
         world.dragBoardRowDown(0);
     }
+
+    @When("the widget enters edit mode")
+    public void widgetEntersEditMode() {
+        world.enterEditModeNoIdle();
+    }
+
+    @When("the edit bar settles")
+    public void editBarSettles() {
+        world.idle(400);
+    }
+
+    @Then("the edit bar starts invisible")
+    public void editBarStartsInvisible() {
+        assertEquals("the edit bar must start its entrance invisible",
+                0f, world.editBarAlphaAtEntrance, 0.01f);
+    }
+
+    @Then("the edit bar is fully visible")
+    public void editBarFullyVisible() {
+        assertEquals("the edit bar must ease in to fully visible",
+                1f, world.editBarAlpha(), 0.01f);
+    }
+
+    @Then("every edit bar button is text only")
+    public void editBarButtonsTextOnly() {
+        assertTrue(world.editBarButtonsAreTextOnly());
+    }
+
+    @Then("the edit bar buttons are separated")
+    public void editBarButtonsSeparated() {
+        assertTrue(world.editBarHasSeparators());
+    }
+
+    @Then("the rows below are back in place")
+    public void rowsBelowBackInPlace() {
+        assertTrue(world.rowsBelowSettled());
+    }
 }

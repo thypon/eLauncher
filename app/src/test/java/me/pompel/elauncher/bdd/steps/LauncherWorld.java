@@ -1710,9 +1710,10 @@ public class LauncherWorld {
     public boolean removeHandleVisibleAndDark(int position) {
         View handle = rowOrEditBarChild(position, R.id.remove_handle);
         if (handle == null || handle.getVisibility() != View.VISIBLE) return false;
-        // the badge must float: dark background + elevation shadow above the
-        // widget (ink on ink with no lift = invisible)
-        return handle.getBackground() != null && handle.getElevation() > 0;
+        // the bar is minimal text buttons now: a visible label with no
+        // background chrome (no border, no elevation) — the accent text
+        // color carries the visibility
+        return handle.getBackground() == null && !((android.widget.Button) handle).isAllCaps();
     }
 
     private void collectDialogTexts(View view, java.util.Set<String> out) {
@@ -1876,6 +1877,111 @@ public class LauncherWorld {
         dashboardScenario.onActivity(a ->
                 d[0] = a.getResources().getDisplayMetrics().density);
         return d[0];
+    }
+
+    /** The edit bar currently shown in the stack, or null. */
+    public android.view.ViewGroup editBarView() {
+        android.view.ViewGroup[] out = new android.view.ViewGroup[1];
+        dashboardScenario.onActivity(a -> {
+            android.view.ViewGroup stack = (android.view.ViewGroup)
+                    a.findViewById(me.pompel.elauncher.R.id.board_stack);
+            out[0] = (android.view.ViewGroup) stack.findViewWithTag("eboard_edit_bar");
+        });
+        return out[0];
+    }
+
+    /** The bar's alpha at the moment edit mode was entered (read in the
+     * same main-thread call: ActivityScenario.onActivity pumps the looper
+     * between calls, so the entrance animation would already be over). */
+    public float editBarAlphaAtEntrance = -1f;
+
+    /** Enters edit mode for the first row and reads the bar's starting
+     * alpha before any looper pump can advance the entrance animation. */
+    public void enterEditModeNoIdle() {
+        dashboardScenario.onActivity(a -> {
+            a.enterEditMode();
+            View stack = a.findViewById(me.pompel.elauncher.R.id.board_stack);
+            View bar = stack.findViewWithTag("eboard_edit_bar");
+            editBarAlphaAtEntrance = bar != null ? bar.getAlpha() : -1f;
+        });
+    }
+
+    public float editBarAlpha() {
+        android.view.ViewGroup bar = editBarView();
+        if (bar == null) throw new AssertionError("no edit bar in the stack");
+        float[] alpha = new float[1];
+        dashboardScenario.onActivity(a -> alpha[0] = bar.getAlpha());
+        return alpha[0];
+    }
+
+    private List<android.widget.Button> editBarButtons() {
+        final List<android.widget.Button>[] holder = new List[1];
+        dashboardScenario.onActivity(a -> {
+            List<android.widget.Button> buttons = new ArrayList<>();
+            android.view.ViewGroup bar = editBarView();
+            if (bar != null) {
+                for (int i = 0; i < bar.getChildCount(); i++) {
+                    if (bar.getChildAt(i) instanceof android.widget.Button) {
+                        buttons.add((android.widget.Button) bar.getChildAt(i));
+                    }
+                }
+            }
+            holder[0] = buttons;
+        });
+        return holder[0];
+    }
+
+    /** Every bar button is a minimal text-only control: no border chrome,
+     * no all-caps, small accent-colored label. */
+    public boolean editBarButtonsAreTextOnly() {
+        List<android.widget.Button> buttons = editBarButtons();
+        if (buttons.isEmpty()) return false;
+        float d = density();
+        for (android.widget.Button b : buttons) {
+            if (b.getBackground() != null) return false;
+            if (b.isAllCaps()) return false;
+            if (b.getText().length() == 0) return false;
+            if (b.getTextSize() > 14f * d) return false;
+        }
+        return true;
+    }
+
+    /** The bar interleaves its text buttons with thin vertical separators. */
+    public boolean editBarHasSeparators() {
+        android.view.ViewGroup bar = editBarView();
+        if (bar == null) return false;
+        final List<View>[] holder = new List[1];
+        dashboardScenario.onActivity(a -> {
+            List<View> seps = new ArrayList<>();
+            for (int i = 0; i < bar.getChildCount(); i++) {
+                if (!(bar.getChildAt(i) instanceof android.widget.Button)) {
+                    seps.add(bar.getChildAt(i));
+                }
+            }
+            holder[0] = seps;
+        });
+        int buttons = editBarButtons().size();
+        float d = density();
+        return buttons >= 2 && holder[0].size() == buttons - 1
+                && holder[0].stream().allMatch(s ->
+                        s.getWidth() <= Math.round(2 * d) && s.getBackground() != null);
+    }
+
+    /** Once the entrance animation finished, no row below the bar stays
+     * translated (the slide down/up ran its course cleanly). */
+    public boolean rowsBelowSettled() {
+        float[] bad = new float[1];
+        dashboardScenario.onActivity(a -> {
+            android.view.ViewGroup stack = (android.view.ViewGroup)
+                    a.findViewById(me.pompel.elauncher.R.id.board_stack);
+            android.view.ViewGroup bar = (android.view.ViewGroup)
+                    stack.findViewWithTag("eboard_edit_bar");
+            if (bar == null) return;
+            for (int i = stack.indexOfChild(bar) + 1; i < stack.getChildCount(); i++) {
+                if (Math.abs(stack.getChildAt(i).getTranslationY()) > 0.5f) bad[0]++;
+            }
+        });
+        return bad[0] == 0;
     }
 
     /** Seeds the board store directly (ids only, no binding) — for stale-widget
