@@ -105,6 +105,20 @@ Feature: eBoard edit mode and widget adder
     And I hold the empty board space below the widgets
     Then the widget adder popover opens
 
+  Scenario: The edit bar buttons are minimal text buttons
+    When I add a widget from the widget adder
+    And I long press the widget row
+    Then every edit bar button is text only
+    And the edit bar buttons are separated
+
+  Scenario: The edit bar eases in above the widget
+    Given the board has 2 widgets
+    When the widget enters edit mode
+    Then the edit bar starts invisible
+    When the edit bar settles
+    Then the edit bar is fully visible
+    And the rows below are back in place
+
   Scenario: Widget rows are built on a plain widget context
     When I add a widget from the widget adder
     Then the widget row is built on a plain widget context

@@ -7,6 +7,7 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.res.TypedArray;
 import android.graphics.Color;
+import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Build;
 import android.os.Bundle;
@@ -77,6 +78,8 @@ public class DashboardActivity extends AppCompatActivity {
     private static final String EDIT_BAR_TAG = "eboard_edit_bar";
     /** Tag of the dashed resize frame inside the edited row. */
     private static final String RESIZE_OVERLAY_TAG = "eboard_resize_overlay";
+    /** Duration of the edit bar's ease-in and the row-shift animation. */
+    private static final long EDIT_BAR_ANIM_MS = 150;
 
     private WidgetHost host;
     private AppWidgetManager widgets;
@@ -329,23 +332,76 @@ public class DashboardActivity extends AppCompatActivity {
     }
 
     /** Switches exactly the given widget into edit mode (Olauncher style):
-     * an edit bar appears above its row. */
-    void enterEditMode(int id) {
+     * an edit bar eases in above its row while the rows below slide down
+     * to make room for it. */
+    public void enterEditMode(int id) {
         if (editingWidgetId == id) return;
         exitEditMode();
         editingWidgetId = id;
         int position = positionOf(id);
         if (position >= 0) {
-            boardStack.addView(editBar(entryAt(position)), position);
+            LinearLayout bar = editBar(entryAt(position));
+            bar.setAlpha(0f); // eases in below
+            boardStack.addView(bar, position);
+            animateEditBarIn(bar, position);
         }
         updateUiState();
+    }
+
+    /** The bar fades in (ease-in) while the rows below it slide down into
+     * the space it just claimed — silent when animations are disabled. */
+    private void animateEditBarIn(LinearLayout bar, int position) {
+        long ms = editAnimMs();
+        if (ms == 0) {
+            bar.setAlpha(1f);
+            return;
+        }
+        final View firstBelow = position + 1 < boardStack.getChildCount()
+                ? boardStack.getChildAt(position + 1) : null;
+        final int topBefore = firstBelow != null ? firstBelow.getTop() : 0;
+        bar.post(() -> {
+            if (firstBelow != null) {
+                // the space the bar occupies: rows slide down by exactly it
+                int delta = firstBelow.getTop() - topBefore;
+                if (delta > 0) {
+                    for (int i = position + 1; i < boardStack.getChildCount(); i++) {
+                        View c = boardStack.getChildAt(i);
+                        c.setTranslationY(-delta);
+                        c.animate().translationY(0f).setDuration(ms);
+                    }
+                }
+            }
+            bar.animate().alpha(1f).setDuration(ms)
+                    .setInterpolator(new android.view.animation.AccelerateInterpolator());
+        });
+    }
+
+    /** Edit bar animations honor the launcher's animations preference. */
+    private long editAnimMs() {
+        return MainActivity.animationsEnabled(PreferenceManager.getDefaultSharedPreferences(this))
+                ? EDIT_BAR_ANIM_MS : 0;
     }
 
     void exitEditMode() {
         if (!isEditing()) return;
         editingWidgetId = -1;
         View bar = boardStack.findViewWithTag(EDIT_BAR_TAG);
-        if (bar != null) boardStack.removeView(bar);
+        if (bar != null) {
+            int index = boardStack.indexOfChild(bar);
+            int height = bar.getHeight();
+            boardStack.removeView(bar);
+            long ms = editAnimMs();
+            if (ms > 0 && height > 0) {
+                // the rows the bar displaced slide back up to close the gap
+                boardStack.post(() -> {
+                    for (int i = index; i < boardStack.getChildCount(); i++) {
+                        View c = boardStack.getChildAt(i);
+                        c.setTranslationY(height);
+                        c.animate().translationY(0f).setDuration(ms);
+                    }
+                });
+            }
+        }
         dismissResizeOverlay();
         updateUiState();
     }
@@ -355,12 +411,13 @@ public class DashboardActivity extends AppCompatActivity {
     }
 
     /** No-arg BDD entry: puts the first row into edit mode. */
-    void enterEditMode() {
+    public void enterEditMode() {
         if (rowCount() > 0) enterEditMode(rowIdAt(0));
     }
 
-    /** The bar shown above a widget in edit mode: remove, tap-mode cycle,
-     * and set up (only for widgets that need configuring). */
+    /** The bar shown above a widget in edit mode: minimal text buttons
+     * (remove, tap mode, height, set up) with thin separators between
+     * them — the same chrome-less style as the Settings gesture buttons. */
     private LinearLayout editBar(WidgetEntry entry) {
         LinearLayout bar = new LinearLayout(this);
         bar.setTag(EDIT_BAR_TAG);
@@ -372,20 +429,23 @@ public class DashboardActivity extends AppCompatActivity {
 
         AppWidgetProviderInfo info = widgets.getAppWidgetInfo(entry.id());
 
-        Button remove = new Button(this);
+        Button remove = textButton();
         remove.setTag(R.id.remove_handle);
         remove.setText(R.string.eboard_edit_remove);
-        remove.setElevation(dp(6));
         remove.setOnClickListener(v -> removeWidget(entry.id()));
         bar.addView(remove, cell);
 
-        Button height = new Button(this);
+        bar.addView(separator());
+
+        Button height = textButton();
         height.setTag(R.id.resize_handle);
         height.setText(R.string.eboard_edit_height);
         height.setOnClickListener(v -> toggleResizeOverlay(entry.id()));
         bar.addView(height, cell);
 
-        Button taps = new Button(this);
+        bar.addView(separator());
+
+        Button taps = textButton();
         taps.setTag(R.id.taps_button);
         taps.setText(tapsLabel(tapsOf(entry.id())));
         taps.setOnClickListener(v -> {
@@ -400,12 +460,43 @@ public class DashboardActivity extends AppCompatActivity {
         bar.addView(taps, cell);
 
         if (info != null && WidgetHostView.needsConfiguration(info)) {
-            Button reconfigure = new Button(this);
+            bar.addView(separator());
+            Button reconfigure = textButton();
             reconfigure.setText(R.string.eboard_edit_reconfigure);
             reconfigure.setOnClickListener(v -> startConfigure(entry.id(), info));
             bar.addView(reconfigure, cell);
         }
         return bar;
+    }
+
+    /** A minimal text-only button: no border or background, the theme's
+     * accent color in the light typeface the rest of the launcher uses. */
+    private Button textButton() {
+        Button b = new Button(this, null, 0);
+        b.setBackground(null);
+        b.setAllCaps(false);
+        b.setMinWidth(0);
+        b.setMinHeight(0);
+        b.setMinimumWidth(0);
+        b.setMinimumHeight(0);
+        b.setGravity(Gravity.CENTER);
+        b.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+        b.setTypeface(Typeface.create("sans-serif-light", Typeface.NORMAL));
+        b.setTextColor(LauncherTheme.getColorFromAttr(
+                this, androidx.appcompat.R.attr.colorPrimary));
+        return b;
+    }
+
+    /** A thin vertical divider between the bar's buttons, matching the
+     * separators in the Settings gesture preference row. */
+    private View separator() {
+        View sep = new View(this);
+        sep.setLayoutParams(new LinearLayout.LayoutParams(
+                (int) Math.ceil(dp(1)), ViewGroup.LayoutParams.MATCH_PARENT));
+        TypedArray ta = obtainStyledAttributes(new int[]{android.R.attr.listDivider});
+        sep.setBackground(ta.getDrawable(0));
+        ta.recycle();
+        return sep;
     }
 
     private String tapsLabel(WidgetTaps taps) {
