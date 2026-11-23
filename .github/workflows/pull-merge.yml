@@ -22,7 +22,7 @@ jobs:
       # pull-merge main (no action-side support needed).
       OPENAI_BASE_URL: ${{ secrets.OPENAI_BASE_URL }}
     steps:
-      - uses: brave/pull-merge@main
+      - uses: brave/pull-merge@087b0e4d204a52ea266b50ff5be92f3539d2f71c # main
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           openai_api_key: ${{ secrets.OPENAI_API_KEY }}
