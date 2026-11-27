@@ -76,6 +76,8 @@ public class DashboardActivity extends AppCompatActivity {
     private static final float HOLD_CANCEL_SLOP_PX = 30;
     /** Tag of the edit bar row inside the stack (rows carry an Integer id). */
     private static final String EDIT_BAR_TAG = "eboard_edit_bar";
+    /** Tag of the "+" row shown on top of the board while editing. */
+    private static final String PLUS_ROW_TAG = "eboard_plus_row";
     /** Tag of the dashed resize frame inside the edited row. */
     private static final String RESIZE_OVERLAY_TAG = "eboard_resize_overlay";
     /** Duration of the edit bar's ease-in and the row-shift animation. */
@@ -88,8 +90,12 @@ public class DashboardActivity extends AppCompatActivity {
     private TextView emptyHint;
     private Button addWidgetButton;
     private WidgetPrefs store;
-    /** The one widget currently in edit mode, or -1. */
-    private int editingWidgetId = -1;
+    /** Whether the whole board is in edit mode: every widget shows its edit
+     * bar and a "+" row lets the user add more widgets. A long press on a
+     * widget toggles it; a long press on any widget while editing exits. */
+    private boolean editing;
+    /** The one widget whose resize frame is open, or -1. */
+    private int resizeWidgetId = -1;
     private AlertDialog adderDialog;
     /** Screen side the launcher opened this board from: -1 left, +1 right,
      * 0 when launched without the launcher (e.g. recents), in which case
@@ -100,9 +106,15 @@ public class DashboardActivity extends AppCompatActivity {
      * must not be recreated on every bind). */
     private final Map<Integer, View> rows = new HashMap<>();
     private final Map<Integer, WidgetHostView> hostViews = new HashMap<>();
+    /** Widget id -> its edit bar, so a bar follows its row during reorders. */
+    private final Map<Integer, View> editBars = new HashMap<>();
     // drag-reorder state
     private int dragStartIndex = -1;
     private int dragCurrentIndex = -1;
+    /** Guards endDrag against the synthetic ACTION_CANCEL the framework
+     * dispatches while a drag re-parents views — the cancel arrives from
+     * inside our own rebuild and would otherwise rebuild re-entrantly. */
+    private boolean endingDrag;
     /** Widget id waiting in the system configure activity, or -1. */
     private int pendingConfigureId = -1;
 
@@ -286,14 +298,14 @@ public class DashboardActivity extends AppCompatActivity {
         boardStack.removeAllViews();
         rows.keySet().retainAll(idsOf(entries));
         hostViews.keySet().retainAll(idsOf(entries));
+        editBars.keySet().retainAll(idsOf(entries));
         for (int i = 0; i < entries.size(); i++) {
             WidgetEntry entry = entries.get(i);
             View row = ensureRow(entry);
+            if (editing) boardStack.addView(editBar(entry));
             boardStack.addView(row);
-            if (entry.id() == editingWidgetId) {
-                boardStack.addView(editBar(entry), i); // bar above its widget
-            }
         }
+        if (editing && !entries.isEmpty()) boardStack.addView(plusRow(), 0);
         updateUiState();
     }
 
@@ -325,69 +337,49 @@ public class DashboardActivity extends AppCompatActivity {
         if (empty) exitEditMode();
     }
 
-    // ---- per-widget edit mode --------------------------------------------------------------
+    // ---- board-wide edit mode --------------------------------------------------------------
 
     private boolean isEditing() {
-        return editingWidgetId != -1;
+        return editing;
     }
 
-    /** Switches exactly the given widget into edit mode (Olauncher style):
-     * an edit bar eases in above its row while the rows below slide down
-     * to make room for it. */
+    /** Toggles the board-wide edit mode (Olauncher style). Entering gives
+     * every widget its own edit bar and puts a "+" row on top for adding
+     * more widgets; a second long press exits. Inserting the bars never
+     * detaches the row under the user's finger, so the ongoing long-press
+     * gesture can still turn into a drag. */
     public void enterEditMode(int id) {
-        if (editingWidgetId == id) return;
-        exitEditMode();
-        editingWidgetId = id;
-        int position = positionOf(id);
-        if (position >= 0) {
-            LinearLayout bar = editBar(entryAt(position));
-            bar.setAlpha(0f); // eases in below
-            boardStack.addView(bar, position);
-            animateEditBarIn(bar, position);
+        if (editing) {
+            exitEditMode();
+            return;
+        }
+        editing = true;
+        resizeWidgetId = -1;
+        // plus row first, then a bar above every row; inserting from the
+        // bottom up keeps the stack indices valid during the pass
+        boardStack.addView(plusRow(), 0);
+        for (int p = rowCount() - 1; p >= 0; p--) {
+            View row = boardRowAt(p);
+            LinearLayout bar = editBar(entryAt(positionOf((Integer) row.getTag())));
+            bar.setAlpha(0f);
+            boardStack.addView(bar, boardStack.indexOfChild(row));
+            bar.animate().alpha(1f).setDuration(editAnimMs());
         }
         updateUiState();
     }
 
-    /** The bar fades in (ease-in) while the rows below it slide down into
-     * the space it just claimed — silent when animations are disabled. */
-    private void animateEditBarIn(LinearLayout bar, int position) {
-        long ms = editAnimMs();
-        if (ms == 0) {
-            bar.setAlpha(1f);
-            return;
-        }
-        final View firstBelow = position + 1 < boardStack.getChildCount()
-                ? boardStack.getChildAt(position + 1) : null;
-        final int topBefore = firstBelow != null ? firstBelow.getTop() : 0;
-        bar.post(() -> {
-            if (firstBelow != null) {
-                // the space the bar occupies: rows slide down by exactly it
-                int delta = firstBelow.getTop() - topBefore;
-                if (delta > 0) {
-                    for (int i = position + 1; i < boardStack.getChildCount(); i++) {
-                        View c = boardStack.getChildAt(i);
-                        c.setTranslationY(-delta);
-                        c.animate().translationY(0f).setDuration(ms);
-                    }
-                }
-            }
-            bar.animate().alpha(1f).setDuration(ms)
-                    .setInterpolator(new android.view.animation.AccelerateInterpolator());
-        });
-    }
-
-    /** Edit bar animations honor the launcher's animations preference. */
-    private long editAnimMs() {
-        return MainActivity.animationsEnabled(PreferenceManager.getDefaultSharedPreferences(this))
-                ? EDIT_BAR_ANIM_MS : 0;
-    }
-
+    /** Leaves edit mode: every bar and the "+" row go away and the rows
+     * slide back up to close the gaps. Never detaches the touched row. */
     void exitEditMode() {
-        if (!isEditing()) return;
-        editingWidgetId = -1;
-        View bar = boardStack.findViewWithTag(EDIT_BAR_TAG);
-        if (bar != null) {
+        if (!editing) return;
+        editing = false;
+        resizeWidgetId = -1;
+        dismissResizeOverlay();
+        View plus = boardStack.findViewWithTag(PLUS_ROW_TAG);
+        if (plus != null) boardStack.removeView(plus);
+        for (View bar : new ArrayList<>(editBars.values())) {
             int index = boardStack.indexOfChild(bar);
+            if (index < 0) continue;
             int height = bar.getHeight();
             boardStack.removeView(bar);
             long ms = editAnimMs();
@@ -402,8 +394,14 @@ public class DashboardActivity extends AppCompatActivity {
                 });
             }
         }
-        dismissResizeOverlay();
+        editBars.clear();
         updateUiState();
+    }
+
+    /** Edit bar animations honor the launcher's animations preference. */
+    private long editAnimMs() {
+        return MainActivity.animationsEnabled(PreferenceManager.getDefaultSharedPreferences(this))
+                ? EDIT_BAR_ANIM_MS : 0;
     }
 
     public boolean isEditMode() {
@@ -421,6 +419,7 @@ public class DashboardActivity extends AppCompatActivity {
     private LinearLayout editBar(WidgetEntry entry) {
         LinearLayout bar = new LinearLayout(this);
         bar.setTag(EDIT_BAR_TAG);
+        editBars.put(entry.id(), bar);
         bar.setOrientation(LinearLayout.HORIZONTAL);
         int pad = (int) dp(8);
         bar.setPadding(pad, pad, pad, pad);
@@ -497,6 +496,19 @@ public class DashboardActivity extends AppCompatActivity {
         sep.setBackground(ta.getDrawable(0));
         ta.recycle();
         return sep;
+    }
+
+    /** The "+" row at the top of the board in edit mode: opens the widget
+     * adder so more widgets can be added without leaving edit mode. */
+    private Button plusRow() {
+        Button plus = textButton();
+        plus.setTag(PLUS_ROW_TAG);
+        plus.setText("+");
+        plus.setTextSize(TypedValue.COMPLEX_UNIT_SP, 22);
+        plus.setLayoutParams(new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, (int) dp(48)));
+        plus.setOnClickListener(v -> openAdder());
+        return plus;
     }
 
     private String tapsLabel(WidgetTaps taps) {
@@ -661,7 +673,7 @@ public class DashboardActivity extends AppCompatActivity {
     private void removeWidget(int id) {
         host.deleteAppWidgetId(id);
         store.remove(id);
-        if (editingWidgetId == id) editingWidgetId = -1;
+        if (resizeWidgetId == id) resizeWidgetId = -1;
         rebuildBoard();
     }
 
@@ -701,8 +713,7 @@ public class DashboardActivity extends AppCompatActivity {
             while (index + 1 < rowChildren().size()) {
                 View next = rowChildren().get(index + 1);
                 if (middle >= next.getTop() + next.getHeight() / 2f) {
-                    boardStack.removeView(row);
-                    boardStack.addView(row, stackIndexOfRowView(index + 1));
+                    moveNeighborAround(next, row, true);
                     dy -= next.getHeight() + spacing;
                     middle -= next.getHeight() + spacing;
                     index++;
@@ -712,8 +723,7 @@ public class DashboardActivity extends AppCompatActivity {
             while (index > 0) {
                 View prev = rowChildren().get(index - 1);
                 if (middle <= prev.getTop() + prev.getHeight() / 2f) {
-                    boardStack.removeView(row);
-                    boardStack.addView(row, stackIndexOfRowView(index - 1));
+                    moveNeighborAround(prev, row, false);
                     dy += prev.getHeight() + spacing;
                     middle += prev.getHeight() + spacing;
                     index--;
@@ -724,12 +734,43 @@ public class DashboardActivity extends AppCompatActivity {
         row.setTranslationY(dy);
     }
 
-    /** Stack index that places the row after `rowIndex` rows (skipping the
-     * edit bar, which sits above the edited row). */
-    private int stackIndexOfRowView(int rowIndex) {
-        List<View> children = rowChildren();
-        if (rowIndex >= children.size()) return boardStack.getChildCount();
-        return boardStack.indexOfChild(children.get(rowIndex));
+    /** Slides a neighbouring row past the dragged one. The dragged row itself
+     * is never removed from the stack: re-parenting the view under the user's
+     * finger cancels its touch stream and kills the drag mid-gesture (and a
+     * cancel while the drag ends rebuilds re-entrantly — the drop crash).
+     * With the edit bars up, the neighbour's bar travels with it. */
+    private void moveNeighborAround(View neighbor, View dragged, boolean above) {
+        int neighborTag = (Integer) neighbor.getTag();
+        View barN = editBars.get(neighborTag);
+        long ms = editAnimMs();
+        int shift = dragged.getHeight() + (int) dp(8);
+        if (barN != null) boardStack.removeView(barN);
+        boardStack.removeView(neighbor);
+        // anchor: for the neighbour to end up above the dragged unit it goes
+        // in front of the dragged row's bar; below it, behind the dragged row
+        // (computed after the removals — indices shifted)
+        View anchor = above ? barAbove(dragged) : dragged;
+        int at = boardStack.indexOfChild(anchor) + (above ? 0 : 1);
+        if (barN != null) {
+            boardStack.addView(barN, at);
+            boardStack.addView(neighbor, at + 1);
+        } else {
+            boardStack.addView(neighbor, at);
+        }
+        if (ms > 0) {
+            neighbor.setTranslationY(above ? shift : -shift);
+            if (barN != null) barN.setTranslationY(above ? shift : -shift);
+            neighbor.animate().translationY(0f).setDuration(ms);
+            if (barN != null) barN.animate().translationY(0f).setDuration(ms);
+        }
+    }
+
+    /** The bar directly above the given row, or null when there is none. */
+    private View barAbove(View row) {
+        int index = boardStack.indexOfChild(row);
+        if (index <= 0) return null;
+        View above = boardStack.getChildAt(index - 1);
+        return above.getTag() == EDIT_BAR_TAG ? above : null;
     }
 
     private int rowIndex(View row) {
@@ -740,16 +781,24 @@ public class DashboardActivity extends AppCompatActivity {
         return -1;
     }
 
-    /** Ends a drag: persists the settled order and lays the row back flat. */
+    /** Ends a drag: persists the settled order and lays the row back flat.
+     * Guarded against re-entrancy: the framework delivers a synthetic
+     * ACTION_CANCEL to a touched view while our own layout work detaches it
+     * (the drop-up crash), which would run endDrag inside endDrag. */
     private void endDrag(View row, float dy) {
-        if (row == null) return;
-        row.setTranslationY(0);
-        if (dragStartIndex != -1 && dragCurrentIndex != dragStartIndex) {
-            store.move(dragStartIndex, dragCurrentIndex);
+        if (endingDrag) return;
+        endingDrag = true;
+        try {
+            if (row != null) row.setTranslationY(0);
+            if (dragStartIndex != -1 && dragCurrentIndex != dragStartIndex) {
+                store.move(dragStartIndex, dragCurrentIndex);
+            }
+            dragStartIndex = -1;
+            dragCurrentIndex = -1;
+            rebuildBoard();
+        } finally {
+            endingDrag = false;
         }
-        dragStartIndex = -1;
-        dragCurrentIndex = -1;
-        rebuildBoard();
     }
 
     // ---- resize frame (Olauncher's resize overlay, vertical only) ---------------------------
@@ -759,10 +808,17 @@ public class DashboardActivity extends AppCompatActivity {
         if (row == null) return;
         if (row.findViewWithTag(RESIZE_OVERLAY_TAG) != null) {
             dismissResizeOverlay();
+            resizeWidgetId = -1;
             return;
         }
-        View editedRow = rows.get(editingWidgetId);
-        if (editedRow != row) return;
+        // in edit mode any widget can be resized; an open frame elsewhere
+        // moves to this one
+        View open = resizeWidgetId != -1 ? rows.get(resizeWidgetId) : null;
+        if (open != null && open != row
+                && open.findViewWithTag(RESIZE_OVERLAY_TAG) != null) {
+            ((ViewGroup) open).removeView(open.findViewWithTag(RESIZE_OVERLAY_TAG));
+        }
+        resizeWidgetId = id;
         ResizeOverlay overlay = new ResizeOverlay(this);
         overlay.setTag(RESIZE_OVERLAY_TAG);
         overlay.setLayoutParams(new FrameLayout.LayoutParams(

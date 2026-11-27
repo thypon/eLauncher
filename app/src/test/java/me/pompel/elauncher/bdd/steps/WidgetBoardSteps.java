@@ -118,4 +118,36 @@ public class WidgetBoardSteps {
     public void rowsBelowBackInPlace() {
         assertTrue(world.rowsBelowSettled());
     }
+
+    @When("I long press widget row {int}")
+    public void longPressWidgetRow(int row) {
+        world.holdBoardRow(row);
+    }
+
+    @Then("every widget row shows an edit bar")
+    public void everyWidgetRowShowsEditBar() {
+        assertTrue("every widget row must have its own edit bar",
+                world.editBarsAboveAllRows());
+    }
+
+    @Then("a plus row sits on top of the board")
+    public void plusRowSitsOnTop() {
+        assertTrue("the board must show the \"+\" add row on top",
+                world.plusRowVisible());
+    }
+
+    @When("I tap the plus row")
+    public void tapPlusRow() {
+        world.clickPlusRow();
+    }
+
+    @When("I tap the second widget's height button")
+    public void tapSecondHeightButton() {
+        world.rowChildPerformClick(1, me.pompel.elauncher.R.id.resize_handle);
+    }
+
+    @When("I drag the second widget above the first by its frame")
+    public void dragSecondAboveFirst() {
+        world.dragRowAboveNeighbour(1);
+    }
 }
