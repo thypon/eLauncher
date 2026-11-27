@@ -54,12 +54,13 @@ import me.pompel.elauncher.widget.WidgetTaps;
  * Interaction model (Olauncher's): the board stacks widgets vertically, each
  * filling the board width. How a widget handles touches is per-widget
  * (WidgetTaps): on, double tap, or off — in the latter modes the touches go
- * to the board as if the widget weren't there. A long press anywhere on a
- * widget enters that widget's edit mode: an edit bar (remove, tap mode, set
- * up) appears above it; keeping the
- * finger down after the long press drags the widget to reorder the stack.
- * Holding empty board space opens the widget adder popover; pressing empty
- * space leaves edit mode. The add button exists only on an empty board.
+ * to the board as if the widget weren't there. A long press on any widget
+ * enters board-wide edit mode: every widget gets an edit bar (remove, tap
+ * mode, set up) and a frame that makes it resizable by its lower edge and
+ * movable by its body, taps are shielded while editing, and a plus row on
+ * top opens the adder. A second long press (or pressing empty space) leaves
+ * edit mode. Holding empty board space opens the widget adder popover; the
+ * add button exists only on an empty board.
  */
 public class DashboardActivity extends AppCompatActivity {
     /** Distinguishes eBoard-hosted widgets from other hosts' widget ids. */
@@ -67,7 +68,7 @@ public class DashboardActivity extends AppCompatActivity {
     private static final int REQUEST_PICK = 1;
     private static final int REQUEST_BIND = 2;
     private static final int REQUEST_CONFIGURE = 3;
-    /** Range of a widget row height in dp, used by the resize handle. */
+    /** Range of a widget row height in dp, used by the resize frame. */
     public static final int MIN_HEIGHT_DP = WidgetPrefs.MIN_HEIGHT_DP;
     public static final int MAX_HEIGHT_DP = WidgetPrefs.MAX_HEIGHT_DP;
     /** Hold duration that opens the adder on empty board space. */
@@ -90,12 +91,11 @@ public class DashboardActivity extends AppCompatActivity {
     private TextView emptyHint;
     private Button addWidgetButton;
     private WidgetPrefs store;
-    /** Whether the whole board is in edit mode: every widget shows its edit
-     * bar and a "+" row lets the user add more widgets. A long press on a
-     * widget toggles it; a long press on any widget while editing exits. */
+    /** Whether the whole board is in edit mode: every widget is framed and
+     * inert (no taps), draggable to reorder and resizable from the bottom
+     * edge of its frame, and a "+" row lets the user add more widgets. A
+     * long press on a widget toggles it; a second long press exits. */
     private boolean editing;
-    /** The one widget whose resize frame is open, or -1. */
-    private int resizeWidgetId = -1;
     private AlertDialog adderDialog;
     /** Screen side the launcher opened this board from: -1 left, +1 right,
      * 0 when launched without the launcher (e.g. recents), in which case
@@ -304,6 +304,7 @@ public class DashboardActivity extends AppCompatActivity {
             View row = ensureRow(entry);
             if (editing) boardStack.addView(editBar(entry));
             boardStack.addView(row);
+            if (editing) attachFrame((ViewGroup) row, entry.id());
         }
         if (editing && !entries.isEmpty()) boardStack.addView(plusRow(), 0);
         updateUiState();
@@ -339,6 +340,7 @@ public class DashboardActivity extends AppCompatActivity {
 
     // ---- board-wide edit mode --------------------------------------------------------------
 
+
     private boolean isEditing() {
         return editing;
     }
@@ -354,9 +356,10 @@ public class DashboardActivity extends AppCompatActivity {
             return;
         }
         editing = true;
-        resizeWidgetId = -1;
-        // plus row first, then a bar above every row; inserting from the
-        // bottom up keeps the stack indices valid during the pass
+        // plus row first, then a bar and an inert frame above every row;
+        // inserting from the bottom up keeps the stack indices valid during
+        // the pass and never detaches the row under the user's finger (the
+        // ongoing long-press gesture can still turn into a drag)
         boardStack.addView(plusRow(), 0);
         for (int p = rowCount() - 1; p >= 0; p--) {
             View row = boardRowAt(p);
@@ -364,6 +367,7 @@ public class DashboardActivity extends AppCompatActivity {
             bar.setAlpha(0f);
             boardStack.addView(bar, boardStack.indexOfChild(row));
             bar.animate().alpha(1f).setDuration(editAnimMs());
+            attachFrame((ViewGroup) row, (Integer) row.getTag());
         }
         updateUiState();
     }
@@ -373,7 +377,6 @@ public class DashboardActivity extends AppCompatActivity {
     void exitEditMode() {
         if (!editing) return;
         editing = false;
-        resizeWidgetId = -1;
         dismissResizeOverlay();
         View plus = boardStack.findViewWithTag(PLUS_ROW_TAG);
         if (plus != null) boardStack.removeView(plus);
@@ -433,14 +436,6 @@ public class DashboardActivity extends AppCompatActivity {
         remove.setText(R.string.eboard_edit_remove);
         remove.setOnClickListener(v -> removeWidget(entry.id()));
         bar.addView(remove, cell);
-
-        bar.addView(separator());
-
-        Button height = textButton();
-        height.setTag(R.id.resize_handle);
-        height.setText(R.string.eboard_edit_height);
-        height.setOnClickListener(v -> toggleResizeOverlay(entry.id()));
-        bar.addView(height, cell);
 
         bar.addView(separator());
 
@@ -673,7 +668,6 @@ public class DashboardActivity extends AppCompatActivity {
     private void removeWidget(int id) {
         host.deleteAppWidgetId(id);
         store.remove(id);
-        if (resizeWidgetId == id) resizeWidgetId = -1;
         rebuildBoard();
     }
 
@@ -732,6 +726,20 @@ public class DashboardActivity extends AppCompatActivity {
         }
         dragCurrentIndex = index;
         row.setTranslationY(dy);
+        autoScrollDuringDrag(row);
+    }
+
+    /** While the dragged row nears the viewport edge the board scrolls, so
+     * rows beyond the screen stay reachable during a reorder. */
+    private void autoScrollDuringDrag(View row) {
+        int edge = Math.round(80 * getResources().getDisplayMetrics().density);
+        int top = row.getTop() + Math.round(row.getTranslationY());
+        int viewport = board.getHeight();
+        if (top < edge) {
+            board.scrollBy(0, -edge / 2);
+        } else if (top + row.getHeight() > board.getScrollY() + viewport - edge) {
+            board.scrollBy(0, edge / 2);
+        }
     }
 
     /** Slides a neighbouring row past the dragged one. The dragged row itself
@@ -803,22 +811,16 @@ public class DashboardActivity extends AppCompatActivity {
 
     // ---- resize frame (Olauncher's resize overlay, vertical only) ---------------------------
 
-    private void toggleResizeOverlay(int id) {
-        View row = rows.get(id);
-        if (row == null) return;
-        if (row.findViewWithTag(RESIZE_OVERLAY_TAG) != null) {
-            dismissResizeOverlay();
-            resizeWidgetId = -1;
-            return;
-        }
-        // in edit mode any widget can be resized; an open frame elsewhere
-        // moves to this one
-        View open = resizeWidgetId != -1 ? rows.get(resizeWidgetId) : null;
-        if (open != null && open != row
-                && open.findViewWithTag(RESIZE_OVERLAY_TAG) != null) {
-            ((ViewGroup) open).removeView(open.findViewWithTag(RESIZE_OVERLAY_TAG));
-        }
-        resizeWidgetId = id;
+    /** Puts an inert frame over a widget: no taps reach the widget, dragging
+     * the frame reorders the row, dragging the bottom-edge handle resizes
+     * it, and a long press on the frame leaves edit mode. */
+    private void attachFrame(ViewGroup row, int id) {
+        // never stack a second frame on the row: rebuilds re-run this while
+        // editing, and a duplicate would survive exit (dismiss only found
+        // the first) — the device bug behind "a second long press doesn't
+        // leave edit mode"
+        View existing = row.findViewWithTag(RESIZE_OVERLAY_TAG);
+        if (existing != null) ((ViewGroup) row).removeView(existing);
         ResizeOverlay overlay = new ResizeOverlay(this);
         overlay.setTag(RESIZE_OVERLAY_TAG);
         overlay.setLayoutParams(new FrameLayout.LayoutParams(
@@ -836,13 +838,21 @@ public class DashboardActivity extends AppCompatActivity {
                 rows.get(id).getHeight() / getResources().getDisplayMetrics().density)));
         overlay.setOnMove(dy -> dragRow(row, dy));
         overlay.setOnMoveEnd(dy -> endDrag(row, dy));
-        ((ViewGroup) row).addView(overlay);
+        overlay.setOnScroll(dy -> board.scrollBy(0, Math.round(dy)));
+        overlay.setOnLongPress(this::exitEditMode);
+        row.addView(overlay);
     }
 
     private void dismissResizeOverlay() {
         for (View row : new ArrayList<>(rows.values())) {
-            View overlay = row.findViewWithTag(RESIZE_OVERLAY_TAG);
-            if (overlay != null) ((ViewGroup) row).removeView(overlay);
+            ViewGroup group = (ViewGroup) row;
+            // remove every frame: a rebuild re-entrancy (the CANCEL fired by
+            // the first removal ends a drag) can leave another one behind
+            View overlay = group.findViewWithTag(RESIZE_OVERLAY_TAG);
+            while (overlay != null) {
+                group.removeView(overlay);
+                overlay = group.findViewWithTag(RESIZE_OVERLAY_TAG);
+            }
         }
     }
 

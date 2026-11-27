@@ -1,8 +1,8 @@
 Feature: eBoard edit mode and widget adder
   Long pressing empty board space opens the widget adder: a bottom popover
   half the screen high that lists every app's widget kind. Long pressing a
-  widget enters edit mode, where each widget shows an (x) remove handle and
-  can be resized and reordered. The add button exists only on an empty board.
+  widget enters edit mode: every widget gets an edit bar and a resize/move
+  frame, taps are shielded, and a plus row on top opens the adder.
 
   Background:
     Given a "Digital" widget provider offering "A digital clock widget" is installed
@@ -132,9 +132,9 @@ Feature: eBoard edit mode and widget adder
   Scenario: A second long press exits edit mode
     Given the board has 2 widgets
     When I long press the widget row
-    And I long press widget row 1
+    And I long press the first widget's frame
     Then edit mode is off
-    And the widget shows no handles
+    And every widget row has no frame
 
   Scenario: The plus row opens the widget adder
     Given the board has 2 widgets
@@ -145,8 +145,23 @@ Feature: eBoard edit mode and widget adder
   Scenario: A widget dropped above its neighbour keeps the board intact
     Given the board has 2 widgets
     When I long press widget row 1
-    And I tap the second widget's height button
     And I drag the second widget above the first by its frame
     Then the board order is "12,11"
     And every widget row shows an edit bar
     And a plus row sits on top of the board
+
+  Scenario: Taps are blocked while editing
+    Given the board has 2 widgets
+    When I long press the widget row
+    And I watch the widget touches
+    And I tap the widget through the board
+    Then the widget receives no tap
+    And every widget row shows a resize frame
+
+  Scenario: Dragging a widget toward the top edge scrolls the board
+    Given the board has 2 widgets
+    And the second widget is 400dp tall
+    When I long press widget row 1
+    And I drag widget row 1 toward the top edge
+    Then the board has scrolled
+    And every widget row shows a resize frame

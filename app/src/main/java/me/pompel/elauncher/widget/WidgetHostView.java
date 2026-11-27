@@ -4,6 +4,7 @@
 package me.pompel.elauncher.widget;
 
 import android.appwidget.AppWidgetHostView;
+import android.view.ViewParent;
 import android.appwidget.AppWidgetProviderInfo;
 import android.content.Context;
 import android.os.Build;
@@ -12,6 +13,8 @@ import android.os.SystemClock;
 import android.util.SizeF;
 import android.view.HapticFeedbackConstants;
 import android.view.MotionEvent;
+import android.view.View;
+import android.view.ViewGroup;
 import android.view.ViewConfiguration;
 import android.widget.RemoteViews;
 
@@ -86,6 +89,13 @@ public class WidgetHostView extends AppWidgetHostView {
         @Override
         public void run() {
             hasPerformedLongPress = true;
+            // From here the gesture is a widget drag: parents (the board's
+            // ScrollView) must not steal the following moves to scroll. The
+            // request must go to the parent — requesting it on this view
+            // would block our own interception and hand the stream back to
+            // the child (Olauncher: parent?.requestDisallowIntercept…).
+            ViewParent vp = getParent();
+            if (vp != null) vp.requestDisallowInterceptTouchEvent(true);
             if (onLongPress != null) {
                 // The widget is being edited now, so the home screen mustn't also act on this touch
                 if (forwardingHome) {
@@ -200,9 +210,57 @@ public class WidgetHostView extends AppWidgetHostView {
     @Override
     public boolean onInterceptTouchEvent(MotionEvent ev) {
         if (deliveringTap) return false;
+        // A swipe inside a scrollable widget region (a music app's track
+        // list) must scroll the widget, not the board: tell the board not
+        // to intercept for this whole gesture. Only the PARENT is blocked —
+        // this view's own interception stays alive, so a long press can
+        // still turn the gesture into a widget drag.
+        if (ev.getActionMasked() == MotionEvent.ACTION_DOWN
+                && taps == WidgetTaps.ON
+                && scrollableChildAt(ev.getX(), ev.getY()) != null) {
+            ViewParent board = getParent();
+            if (board != null) board.requestDisallowInterceptTouchEvent(true);
+        }
         trackLongPress(ev);
         // Once the long press fired, take over the gesture so the widget doesn't also get a click
         return taps != WidgetTaps.ON || hasPerformedLongPress;
+    }
+
+    /** The deepest scrollable view under the point, or null. */
+    private View scrollableChildAt(float x, float y) {
+        for (int i = getChildCount() - 1; i >= 0; i--) {
+            View c = getChildAt(i);
+            if (c.getVisibility() != VISIBLE) continue;
+            float cx = x - c.getLeft();
+            float cy = y - c.getTop();
+            if (cx >= 0 && cx <= c.getWidth() && cy >= 0 && cy <= c.getHeight()) {
+                View found = scrollableDescendant(c, cx, cy);
+                if (found != null) return found;
+            }
+        }
+        return null;
+    }
+
+    private View scrollableDescendant(View v, float x, float y) {
+        if (v instanceof android.widget.AbsListView
+                || v instanceof android.widget.ScrollView
+                || v instanceof androidx.recyclerview.widget.RecyclerView) {
+            return v;
+        }
+        if (v instanceof ViewGroup) {
+            ViewGroup g = (ViewGroup) v;
+            for (int i = g.getChildCount() - 1; i >= 0; i--) {
+                View c = g.getChildAt(i);
+                if (c.getVisibility() != VISIBLE) continue;
+                float cx = x - c.getLeft();
+                float cy = y - c.getTop();
+                if (cx >= 0 && cx <= c.getWidth() && cy >= 0 && cy <= c.getHeight()) {
+                    View found = scrollableDescendant(c, cx, cy);
+                    if (found != null) return found;
+                }
+            }
+        }
+        return null;
     }
 
     @Override

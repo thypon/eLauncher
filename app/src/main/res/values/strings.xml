@@ -35,7 +35,6 @@
     <string name="eboard_empty_hint">The board is empty.\nTap “Add widget” to pin a widget.</string>
     <string name="eboard_edit_hint">Drag ▢ to resize · ✕ removes · press empty space to end</string>
     <string name="eboard_edit_remove">Remove</string>
-    <string name="eboard_edit_height">Height</string>
     <string name="eboard_edit_reconfigure">Set up</string>
     <string name="eboard_taps_on">Tap: on</string>
     <string name="eboard_taps_double">Tap: double</string>
