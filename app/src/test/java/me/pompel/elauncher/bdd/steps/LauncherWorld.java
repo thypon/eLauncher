@@ -10,6 +10,7 @@ import android.content.pm.ResolveInfo;
 import android.os.Looper;
 import android.preference.PreferenceManager;
 import android.view.View;
+import android.view.ViewGroup;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import androidx.appcompat.app.AppCompatDelegate;
@@ -2162,7 +2163,7 @@ public class LauncherWorld {
             boardView.dispatchTouchEvent(android.view.MotionEvent.obtain(
                     now, now, android.view.MotionEvent.ACTION_DOWN, dragStartX, dragStartY, 0));
         });
-        idle();
+        idle(800); // the frame only starts a move once the long press fired
         dashboardScenario.onActivity(a -> {
             View boardView = a.findViewById(R.id.board);
             View dragged = a.boardRowAt(row);
@@ -2172,6 +2173,127 @@ public class LauncherWorld {
                     now, now, android.view.MotionEvent.ACTION_MOVE, dragStartX, y, 0));
             boardView.dispatchTouchEvent(android.view.MotionEvent.obtain(
                     now, now, android.view.MotionEvent.ACTION_UP, dragStartX, y, 0));
+        });
+        idle();
+    }
+
+    /** Dispatches a tap through the board hierarchy at the widget's on-screen
+     * spot, so overlays attached above the row (edit frame) get first crack. */
+    public void tapWidgetThroughBoard(int position) {
+        dashboardScenario.onActivity(a -> {
+            View boardView = a.findViewById(R.id.board);
+            View row = a.boardRowAt(position);
+            if (boardView == null || row == null) return;
+            int w = boardView.getWidth() > 0 ? boardView.getWidth() : 1080;
+            int h = boardView.getHeight() > 0 ? boardView.getHeight() : 2000;
+            boardView.measure(View.MeasureSpec.makeMeasureSpec(w, View.MeasureSpec.EXACTLY),
+                    View.MeasureSpec.makeMeasureSpec(h, View.MeasureSpec.EXACTLY));
+            boardView.layout(0, 0, w, h);
+            int[] rl = new int[2];
+            row.getLocationOnScreen(rl);
+            int[] bl = new int[2];
+            boardView.getLocationOnScreen(bl);
+            int x = 60;
+            int y = rl[1] - bl[1] + 40;
+            long now = android.os.SystemClock.uptimeMillis();
+            boardView.dispatchTouchEvent(android.view.MotionEvent.obtain(
+                    now, now, android.view.MotionEvent.ACTION_DOWN, x, y, 0));
+            boardView.dispatchTouchEvent(android.view.MotionEvent.obtain(
+                    now, now, android.view.MotionEvent.ACTION_UP, x, y, 0));
+        });
+        idle();
+    }
+
+    /** True when every widget row carries exactly one visible resize/move
+     * frame (a duplicate frame used to survive exit — the "second long
+     * press doesn't leave edit mode" device bug). */
+    public boolean framesOnAllRows() {
+        boolean[] ok = new boolean[1];
+        dashboardScenario.onActivity(a -> {
+            ok[0] = true;
+            for (int p = 0; p < a.rowCount(); p++) {
+                ViewGroup row = (ViewGroup) a.boardRowAt(p);
+                int frames = 0;
+                for (int c = 0; c < row.getChildCount(); c++) {
+                    if ("eboard_resize_overlay".equals(row.getChildAt(c).getTag())
+                            && row.getChildAt(c).getVisibility() == View.VISIBLE) frames++;
+                }
+                if (frames != 1) ok[0] = false;
+            }
+        });
+        return ok[0];
+    }
+
+    public int boardScrollY() {
+        int[] y = new int[1];
+        dashboardScenario.onActivity(a ->
+                y[0] = a.findViewById(R.id.board).getScrollY());
+        return y[0];
+    }
+
+    /** A long press that travels through the real hierarchy, so the frame
+     * over the row receives it (the frame is the topmost touchable once
+     * edit mode is on). */
+    public void holdRowFrame(int row) {
+        dashboardScenario.onActivity(a -> {
+            View boardView = a.findViewById(R.id.board);
+            View target = a.boardRowAt(row);
+            if (boardView == null || target == null) return;
+            int w = boardView.getWidth() > 0 ? boardView.getWidth() : 1080;
+            int h = boardView.getHeight() > 0 ? boardView.getHeight() : 2000;
+            boardView.measure(View.MeasureSpec.makeMeasureSpec(w, View.MeasureSpec.EXACTLY),
+                    View.MeasureSpec.makeMeasureSpec(h, View.MeasureSpec.EXACTLY));
+            boardView.layout(0, 0, w, h);
+            int[] tl = new int[2];
+            target.getLocationOnScreen(tl);
+            int[] bl = new int[2];
+            boardView.getLocationOnScreen(bl);
+            long now = android.os.SystemClock.uptimeMillis();
+            boardView.dispatchTouchEvent(android.view.MotionEvent.obtain(
+                    now, now, android.view.MotionEvent.ACTION_DOWN, 60, tl[1] - bl[1] + 40, 0));
+        });
+        idle(800);
+        dashboardScenario.onActivity(a -> {
+            View boardView = a.findViewById(R.id.board);
+            long now = android.os.SystemClock.uptimeMillis();
+            boardView.dispatchTouchEvent(android.view.MotionEvent.obtain(
+                    now, now, android.view.MotionEvent.ACTION_UP, 60, 100, 0));
+        });
+        idle();
+    }
+
+    /** Drags the row's frame upward in small steps until the pointer reaches
+     * the top edge band, exercising the board's autoscroll during drag. */
+    public void dragRowTowardTopEdge(int row) {
+        dashboardScenario.onActivity(a -> {
+            View overlay = a.boardRowAt(row).findViewWithTag("eboard_resize_overlay");
+            View boardView = a.findViewById(R.id.board);
+            if (overlay == null || boardView == null) return;
+            int w = boardView.getWidth() > 0 ? boardView.getWidth() : 1080;
+            int h = boardView.getHeight() > 0 ? boardView.getHeight() : 2000;
+            boardView.measure(View.MeasureSpec.makeMeasureSpec(w, View.MeasureSpec.EXACTLY),
+                    View.MeasureSpec.makeMeasureSpec(h, View.MeasureSpec.EXACTLY));
+            boardView.layout(0, 0, w, h);
+            int[] ol = new int[2];
+            overlay.getLocationOnScreen(ol);
+            int[] bl = new int[2];
+            boardView.getLocationOnScreen(bl);
+            int x = 60;
+            int y = ol[1] - bl[1] + 40; // upper frame area: a move, not a resize
+            long now = android.os.SystemClock.uptimeMillis();
+            boardView.dispatchTouchEvent(android.view.MotionEvent.obtain(
+                    now, now, android.view.MotionEvent.ACTION_DOWN, x, y, 0));
+            idle();
+            while (y > 80) {
+                y -= 45;
+                long t = android.os.SystemClock.uptimeMillis();
+                boardView.dispatchTouchEvent(android.view.MotionEvent.obtain(
+                        t, t, android.view.MotionEvent.ACTION_MOVE, x, y, 0));
+                idle();
+            }
+            long up = android.os.SystemClock.uptimeMillis();
+            boardView.dispatchTouchEvent(android.view.MotionEvent.obtain(
+                    up, up, android.view.MotionEvent.ACTION_UP, x, y, 0));
         });
         idle();
     }

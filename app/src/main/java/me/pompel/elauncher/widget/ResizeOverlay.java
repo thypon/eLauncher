@@ -8,14 +8,17 @@ import android.graphics.Canvas;
 import android.graphics.DashPathEffect;
 import android.graphics.Paint;
 import android.graphics.RectF;
+import android.view.HapticFeedbackConstants;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewConfiguration;
 
 /** Drawn over a widget while it's being edited: a dashed outline with a
  * handle on the bottom edge. The widget underneath gets no touches meanwhile.
- * Dragging the handle reports how much the widget should grow since the drag
- * started; dragging anywhere else reports how far the widget was moved
- * vertically (drag-reorder while editing). */
+ * Dragging the handle resizes the widget; a long press followed by a drag
+ * moves it (drag-reorder while editing); releasing a long press without
+ * dragging leaves edit mode; dragging the body without a long press scrolls
+ * the board instead, so edit mode never traps scrolling. */
 public class ResizeOverlay extends View {
 
     /** Called while dragging the handle with the growth in px since the drag
@@ -39,13 +42,30 @@ public class ResizeOverlay extends View {
         void onMoveEnd(float dy);
     }
 
+    /** Called when the user releases a long press without dragging: with a
+     * frame on every widget, that is the "second long press" that leaves
+     * edit mode. */
+    public interface OnLongPress {
+        void onLongPress();
+    }
+
+    /** Called with a scroll delta (px, positive = content moves down) while
+     * the user drags over the widget body without a long press, so the board
+     * can still be scrolled in edit mode. */
+    public interface OnScroll {
+        void onScroll(float dy);
+    }
+
     private OnResize onResize;
     private OnResizeEnd onResizeEnd;
     private OnMove onMove;
     private OnMoveEnd onMoveEnd;
+    private OnLongPress onLongPress;
+    private OnScroll onScroll;
 
     private final float density;
     private final float handleTouchSize;
+    private final float touchSlop;
     private final RectF rect = new RectF();
 
     private final Paint dimPaint = new Paint();
@@ -53,13 +73,27 @@ public class ResizeOverlay extends View {
     private final Paint handlePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
 
     private boolean draggingHeight;
-    private boolean moving;
+    private boolean dragMode;
+    private boolean scrollMode;
+    private boolean longPressFired;
+    private boolean movedSinceLongPress;
+    private float startRawX;
     private float startRawY;
+    private float lastRawY;
+    private final Runnable longPressRunnable = new Runnable() {
+        @Override public void run() {
+            longPressFired = true;
+            dragMode = true;
+            movedSinceLongPress = false;
+            performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+        }
+    };
 
     public ResizeOverlay(Context context) {
         super(context);
         density = getResources().getDisplayMetrics().density;
         handleTouchSize = 44 * density;
+        touchSlop = ViewConfiguration.get(context).getScaledTouchSlop();
         dimPaint.setColor(0x40000000);
         borderPaint.setStyle(Paint.Style.STROKE);
         borderPaint.setStrokeWidth(2 * density);
@@ -81,6 +115,14 @@ public class ResizeOverlay extends View {
 
     public void setOnMoveEnd(OnMoveEnd listener) {
         onMoveEnd = listener;
+    }
+
+    public void setOnLongPress(OnLongPress listener) {
+        onLongPress = listener;
+    }
+
+    public void setOnScroll(OnScroll listener) {
+        onScroll = listener;
     }
 
     /** Ink color of the outline and handle (theme primary). */
@@ -114,24 +156,58 @@ public class ResizeOverlay extends View {
             case MotionEvent.ACTION_DOWN:
                 draggingHeight = event.getY() > getHeight() - handleTouchSize;
                 // Raw coordinates, since the view itself changes size during the drag
+                startRawX = event.getRawX();
                 startRawY = event.getRawY();
-                moving = !draggingHeight;
+                lastRawY = startRawY;
+                dragMode = false;
+                scrollMode = false;
+                longPressFired = false;
+                if (!draggingHeight) {
+                    postDelayed(longPressRunnable, ViewConfiguration.getLongPressTimeout());
+                }
                 if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(true);
                 break;
             case MotionEvent.ACTION_MOVE:
-                if (moving) {
+                if (draggingHeight) {
+                    removeCallbacks(longPressRunnable);
+                    if (onResize != null) onResize.onResize(event.getRawY() - startRawY);
+                    return true;
+                }
+                if (dragMode) {
+                    movedSinceLongPress = true;
                     if (onMove != null) onMove.onMove(event.getRawY() - startRawY);
                     return true;
                 }
-                float growHeight = event.getRawY() - startRawY;
-                if (onResize != null) onResize.onResize(growHeight);
+                if (scrollMode) {
+                    // Finger up = see content further down
+                    if (onScroll != null) onScroll.onScroll(lastRawY - event.getRawY());
+                    lastRawY = event.getRawY();
+                    return true;
+                }
+                if (Math.abs(event.getRawX() - startRawX) > touchSlop
+                        || Math.abs(event.getRawY() - startRawY) > touchSlop) {
+                    // A plain drag over the body scrolls the board, it never
+                    // starts moving the widget before the long press fires
+                    removeCallbacks(longPressRunnable);
+                    scrollMode = true;
+                    lastRawY = event.getRawY();
+                }
                 break;
             case MotionEvent.ACTION_UP:
             case MotionEvent.ACTION_CANCEL:
-                if (moving && onMoveEnd != null) onMoveEnd.onMoveEnd(event.getRawY() - startRawY);
-                else if (!moving && onResizeEnd != null) onResizeEnd.onResizeEnd();
+                removeCallbacks(longPressRunnable);
+                if (draggingHeight) {
+                    if (onResizeEnd != null) onResizeEnd.onResizeEnd();
+                } else if (dragMode && movedSinceLongPress) {
+                    if (onMoveEnd != null) onMoveEnd.onMoveEnd(event.getRawY() - startRawY);
+                } else if (longPressFired && onLongPress != null) {
+                    onLongPress.onLongPress();
+                }
                 draggingHeight = false;
-                moving = false;
+                dragMode = false;
+                scrollMode = false;
+                longPressFired = false;
+                movedSinceLongPress = false;
                 break;
             default:
                 break;

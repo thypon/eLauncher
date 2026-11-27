@@ -5,6 +5,7 @@ import io.cucumber.java.en.Then;
 import io.cucumber.java.en.When;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 /** Steps for the Olauncher widget behaviors: per-widget tap modes
@@ -141,13 +142,53 @@ public class WidgetBoardSteps {
         world.clickPlusRow();
     }
 
-    @When("I tap the second widget's height button")
-    public void tapSecondHeightButton() {
-        world.rowChildPerformClick(1, me.pompel.elauncher.R.id.resize_handle);
-    }
-
     @When("I drag the second widget above the first by its frame")
     public void dragSecondAboveFirst() {
         world.dragRowAboveNeighbour(1);
+    }
+
+    @When("I tap the widget through the board")
+    public void tapWidgetThroughBoard() {
+        world.tapWidgetThroughBoard(0);
+    }
+
+    @Then("the widget receives no tap")
+    public void widgetReceivesNoTap() {
+        assertFalse("the widget must not see touches while editing",
+                world.widgetTouchSpied());
+    }
+
+    @Then("every widget row shows a resize frame")
+    public void everyRowFramed() {
+        assertTrue("every widget row must carry a resize frame",
+                world.framesOnAllRows());
+    }
+
+    @Given("the second widget is {int}dp tall")
+    public void secondWidgetTall(int dp) {
+        world.dashboard().applyRowHeight(1, dp);
+        world.idle();
+    }
+
+    @When("I drag widget row {int} toward the top edge")
+    public void dragRowTowardTopEdge(int row) {
+        world.dragRowTowardTopEdge(row);
+    }
+
+    @When("I long press the first widget's frame")
+    public void longPressFirstFrame() {
+        world.holdRowFrame(0);
+    }
+
+    @Then("every widget row has no frame")
+    public void noFramesLeft() {
+        assertFalse("edit mode must remove every resize frame",
+                world.framesOnAllRows());
+    }
+
+    @Then("the board has scrolled")
+    public void boardHasScrolled() {
+        assertTrue("dragging toward the edge must scroll the board",
+                world.boardScrollY() > 0);
     }
 }
