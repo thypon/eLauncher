@@ -136,6 +136,13 @@ Feature: eBoard edit mode and widget adder
     Then edit mode is off
     And every widget row has no frame
 
+  Scenario: A held resize handle leaves edit mode
+    Given the board has 2 widgets
+    When I long press the widget row
+    And I hold the first widget's resize handle
+    Then edit mode is off
+    And every widget row has no frame
+
   Scenario: The plus row opens the widget adder
     Given the board has 2 widgets
     When I long press the widget row

@@ -1003,10 +1003,14 @@ public class DashboardActivity extends AppCompatActivity {
     /** Launches a widget's configure activity for an already-bound id. */
     private void startConfigure(int id, AppWidgetProviderInfo info) {
         if (info.configure == null) return;
-        // the host path: the framework asks the appwidget service for the
-        // configure PendingIntent and starts it (Robolectric shadows emulate
-        // the same observable launch)
-        host.startAppWidgetConfigureActivityForResult(this, id, 0, REQUEST_CONFIGURE, null);
+        // A direct, explicit launch: the host's PendingIntent path is
+        // started by the system while our own dialog is dismissing, which
+        // Android's background-activity-launch hardening blocks (API 31+).
+        // Our own window is visible, so the direct start is allowed.
+        Intent configure = new Intent(AppWidgetManager.ACTION_APPWIDGET_CONFIGURE);
+        configure.setComponent(info.configure);
+        configure.putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, id);
+        startActivityForResult(configure, REQUEST_CONFIGURE);
     }
 
     public void closeAdder() {
