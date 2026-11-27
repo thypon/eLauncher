@@ -481,6 +481,9 @@ public class LauncherWorld {
     private float pickedSlotY;
     private float pickedSlotDy;
     private int pickedSlotBaseTop;
+    /** Start coordinates of the in-flight resize-frame drag (world helpers). */
+    private float dragStartX;
+    private float dragStartY;
     private int pickedSlotHeight;
 
     /** Horizontal fling on the eBoard dashboard screen. Mirrors fling() on
@@ -1801,12 +1804,19 @@ public class LauncherWorld {
     }
 
     /** A row child, or — for edit-bar controls like the remove handle — a
-     * child of the bar shown above the edited row. */
+     * child of the bar shown above that row (each row has its own bar in
+     * board-wide edit mode, all sharing the same child tags). */
     public View rowOrEditBarChild(int position, int childTag) {
         View row = dashboard().boardRowAt(position);
         View child = row.findViewWithTag(childTag);
         if (child == null && row.getParent() instanceof android.view.ViewGroup) {
-            child = ((android.view.ViewGroup) row.getParent()).findViewWithTag(childTag);
+            android.view.ViewGroup stack = (android.view.ViewGroup) row.getParent();
+            int idx = stack.indexOfChild(row);
+            View bar = idx > 0 ? stack.getChildAt(idx - 1) : null;
+            if (bar != null && "eboard_edit_bar".equals(bar.getTag())) {
+                child = bar.findViewWithTag(childTag);
+            }
+            if (child == null) child = stack.findViewWithTag(childTag);
         }
         return child;
     }
@@ -2080,6 +2090,90 @@ public class LauncherWorld {
 
     public int homeGestureCount() {
         return homeGestureEvents.size();
+    }
+
+    // ---- board-wide edit mode ---------------------------------------------------------------
+
+    /** Whether every board row has an edit bar directly above it. */
+    public boolean editBarsAboveAllRows() {
+        boolean[] ok = {true};
+        dashboardScenario.onActivity(a -> {
+            if (a.rowCount() == 0) { ok[0] = false; return; }
+            android.view.ViewGroup stack = (android.view.ViewGroup) a.boardRowAt(0).getParent();
+            for (int i = 0; i < a.rowCount(); i++) {
+                View row = a.boardRowAt(i);
+                int idx = stack.indexOfChild(row);
+                View above = idx > 0 ? stack.getChildAt(idx - 1) : null;
+                if (above == null || !"eboard_edit_bar".equals(above.getTag())) {
+                    ok[0] = false;
+                }
+            }
+        });
+        return ok[0];
+    }
+
+    /** Whether the "+" add row sits on top of the board. */
+    public boolean plusRowVisible() {
+        boolean[] ok = {false};
+        dashboardScenario.onActivity(a -> {
+            if (a.rowCount() == 0) return;
+            android.view.ViewGroup stack = (android.view.ViewGroup) a.boardRowAt(0).getParent();
+            View top = stack.getChildAt(0);
+            ok[0] = "eboard_plus_row".equals(top.getTag()) && top.getVisibility() == View.VISIBLE;
+        });
+        return ok[0];
+    }
+
+    /** Taps the "+" add row (edit mode). */
+    public void clickPlusRow() {
+        dashboardScenario.onActivity(a -> {
+            android.view.ViewGroup stack = (android.view.ViewGroup) a.boardRowAt(0).getParent();
+            for (int i = 0; i < stack.getChildCount(); i++) {
+                View child = stack.getChildAt(i);
+                if ("eboard_plus_row".equals(child.getTag())) {
+                    child.performClick();
+                    break;
+                }
+            }
+        });
+        idle();
+    }
+
+    /** Drags the row's resize frame upward past the row above it through the
+     * real view hierarchy, then drops — the path that used to crash on
+     * device when the drop re-entered the rebuild mid-removal. */
+    public void dragRowAboveNeighbour(int row) {
+        dashboardScenario.onActivity(a -> {
+            View overlay = a.boardRowAt(row).findViewWithTag("eboard_resize_overlay");
+            View boardView = a.findViewById(R.id.board);
+            if (overlay == null || boardView == null) return;
+            int w = boardView.getWidth() > 0 ? boardView.getWidth() : 1080;
+            int h = boardView.getHeight() > 0 ? boardView.getHeight() : 2000;
+            boardView.measure(View.MeasureSpec.makeMeasureSpec(w, View.MeasureSpec.EXACTLY),
+                    View.MeasureSpec.makeMeasureSpec(h, View.MeasureSpec.EXACTLY));
+            boardView.layout(0, 0, w, h);
+            int[] ol = new int[2];
+            overlay.getLocationOnScreen(ol);
+            int[] bl = new int[2];
+            boardView.getLocationOnScreen(bl);
+            dragStartX = 60;
+            dragStartY = ol[1] - bl[1] + 40; // upper frame area: a move, not a resize
+            long now = android.os.SystemClock.uptimeMillis();
+            boardView.dispatchTouchEvent(android.view.MotionEvent.obtain(
+                    now, now, android.view.MotionEvent.ACTION_DOWN, dragStartX, dragStartY, 0));
+        });
+        idle();
+        dashboardScenario.onActivity(a -> {
+            View boardView = a.findViewById(R.id.board);
+            View dragged = a.boardRowAt(row);
+            float y = dragStartY - dragged.getHeight() - 90; // well past the row above
+            long now = android.os.SystemClock.uptimeMillis();
+            boardView.dispatchTouchEvent(android.view.MotionEvent.obtain(
+                    now, now, android.view.MotionEvent.ACTION_MOVE, dragStartX, y, 0));
+            boardView.dispatchTouchEvent(android.view.MotionEvent.obtain(
+                    now, now, android.view.MotionEvent.ACTION_UP, dragStartX, y, 0));
+        });
+        idle();
     }
 
     public String storedTaps(int position) {

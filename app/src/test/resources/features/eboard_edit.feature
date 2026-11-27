@@ -122,3 +122,31 @@ Feature: eBoard edit mode and widget adder
   Scenario: Widget rows are built on a plain widget context
     When I add a widget from the widget adder
     Then the widget row is built on a plain widget context
+
+  Scenario: A long press turns edit mode on for every widget
+    Given the board has 2 widgets
+    When I long press the widget row
+    Then every widget row shows an edit bar
+    And a plus row sits on top of the board
+
+  Scenario: A second long press exits edit mode
+    Given the board has 2 widgets
+    When I long press the widget row
+    And I long press widget row 1
+    Then edit mode is off
+    And the widget shows no handles
+
+  Scenario: The plus row opens the widget adder
+    Given the board has 2 widgets
+    When I long press the widget row
+    And I tap the plus row
+    Then the widget adder popover opens
+
+  Scenario: A widget dropped above its neighbour keeps the board intact
+    Given the board has 2 widgets
+    When I long press widget row 1
+    And I tap the second widget's height button
+    And I drag the second widget above the first by its frame
+    Then the board order is "12,11"
+    And every widget row shows an edit bar
+    And a plus row sits on top of the board
