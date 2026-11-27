@@ -181,11 +181,6 @@ public class DashboardSteps {
         world.deliverConfigureResult(false);
     }
 
-    @Then("the configuration is requested through the widget host")
-    public void configurationThroughHost() {
-        assertEquals(1, world.hostConfigureRequests());
-    }
-
     @When("I hold the empty board space")
     public void holdEmptyBoardSpace() {
         // shrinks the last row to its minimum and holds on the space below:

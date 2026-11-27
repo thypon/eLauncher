@@ -2262,6 +2262,45 @@ public class LauncherWorld {
         idle();
     }
 
+    /** A long press on the row's resize handle (the bottom 44dp of its
+     * frame): held without dragging, it must also leave edit mode. */
+    public void holdRowHandle(int row) {
+        dashboardScenario.onActivity(a -> {
+            View boardView = a.findViewById(R.id.board);
+            View target = a.boardRowAt(row);
+            if (boardView == null || target == null) return;
+            int w = boardView.getWidth() > 0 ? boardView.getWidth() : 1080;
+            int h = boardView.getHeight() > 0 ? boardView.getHeight() : 2000;
+            boardView.measure(View.MeasureSpec.makeMeasureSpec(w, View.MeasureSpec.EXACTLY),
+                    View.MeasureSpec.makeMeasureSpec(h, View.MeasureSpec.EXACTLY));
+            boardView.layout(0, 0, w, h);
+            int[] tl = new int[2];
+            target.getLocationOnScreen(tl);
+            int[] bl = new int[2];
+            boardView.getLocationOnScreen(bl);
+            int x = 60;
+            int y = tl[1] - bl[1] + target.getHeight() - 20;
+            long now = android.os.SystemClock.uptimeMillis();
+            boardView.dispatchTouchEvent(android.view.MotionEvent.obtain(
+                    now, now, android.view.MotionEvent.ACTION_DOWN, x, y, 0));
+        });
+        idle(800);
+        dashboardScenario.onActivity(a -> {
+            View boardView = a.findViewById(R.id.board);
+            View target = a.boardRowAt(row);
+            if (boardView == null || target == null) return;
+            int[] tl = new int[2];
+            target.getLocationOnScreen(tl);
+            int[] bl = new int[2];
+            boardView.getLocationOnScreen(bl);
+            long now = android.os.SystemClock.uptimeMillis();
+            boardView.dispatchTouchEvent(android.view.MotionEvent.obtain(
+                    now, now, android.view.MotionEvent.ACTION_UP, 60,
+                    tl[1] - bl[1] + target.getHeight() - 20, 0));
+        });
+        idle();
+    }
+
     /** Drags the row's frame upward in small steps until the pointer reaches
      * the top edge band, exercising the board's autoscroll during drag. */
     public void dragRowTowardTopEdge(int row) {

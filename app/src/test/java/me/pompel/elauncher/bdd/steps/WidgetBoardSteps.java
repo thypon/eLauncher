@@ -180,6 +180,11 @@ public class WidgetBoardSteps {
         world.holdRowFrame(0);
     }
 
+    @When("I hold the first widget's resize handle")
+    public void holdFirstHandle() {
+        world.holdRowHandle(0);
+    }
+
     @Then("every widget row has no frame")
     public void noFramesLeft() {
         assertFalse("edit mode must remove every resize frame",

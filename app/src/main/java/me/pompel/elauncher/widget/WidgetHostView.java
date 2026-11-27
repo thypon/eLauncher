@@ -153,6 +153,17 @@ public class WidgetHostView extends AppWidgetHostView {
             // The second tap belongs to the widget, so the home screen mustn't see a double tap (lock)
             if (isSecondTap && onHomeGestureCancel != null) onHomeGestureCancel.onHomeGestureCancel();
         }
+        if (ev.getActionMasked() == MotionEvent.ACTION_POINTER_DOWN
+                && ev.getPointerCount() >= 2) {
+            // Two fingers mean the user wants the board itself to scroll,
+            // never the widget's inner list: give the touch back to the
+            // parent ScrollView (it re-checks the drag slop on the next
+            // move). Dispatch is the one hook that always runs — a child
+            // that claimed the stream would skip our own interception.
+            ViewParent board = getParent();
+            if (board != null) board.requestDisallowInterceptTouchEvent(false);
+            removeCallbacks(longPressRunnable);
+        }
         if (forwardingHome && homeGestures != null) homeGestures.onHomeGesture(ev);
 
         boolean wasPlainTap = !movedBeyondSlop && !hasPerformedLongPress;
@@ -214,7 +225,8 @@ public class WidgetHostView extends AppWidgetHostView {
         // list) must scroll the widget, not the board: tell the board not
         // to intercept for this whole gesture. Only the PARENT is blocked —
         // this view's own interception stays alive, so a long press can
-        // still turn the gesture into a widget drag.
+        // still turn the gesture into a widget drag. Two fingers undo this
+        // (see dispatchTouchEvent): they always scroll the board.
         if (ev.getActionMasked() == MotionEvent.ACTION_DOWN
                 && taps == WidgetTaps.ON
                 && scrollableChildAt(ev.getX(), ev.getY()) != null) {

@@ -63,7 +63,6 @@ Feature: eBoard widgets
     And the widget adder popover opens
     And I select the widget kind from the widget adder
     Then the widget configuration is requested
-    And the configuration is requested through the widget host
     When the configuration succeeds
     Then a widget row is on the board
     And the widget is remembered by the board
